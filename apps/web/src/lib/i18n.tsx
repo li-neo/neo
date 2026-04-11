@@ -90,6 +90,12 @@ const dict = {
   },
   admin: {
     title: { en: "Admin Dashboard", zh: "管理后台" },
+    dashboard: { en: "Dashboard", zh: "管理台" },
+    viewSite: { en: "View Site", zh: "返回站点" },
+    mode: { en: "Admin Mode", zh: "管理模式" },
+    managing: { en: "Managing current page", zh: "正在管理当前页面" },
+    openPanel: { en: "Open Panel", zh: "打开后台" },
+    manageSection: { en: "Manage Section", zh: "管理当前栏目" },
     login: { en: "Admin Login", zh: "管理员登录" },
     loginDesc: { en: "Sign in with GitHub to access the admin panel", zh: "使用 GitHub 登录以访问管理后台" },
     loginBtn: { en: "Sign in with GitHub", zh: "使用 GitHub 登录" },

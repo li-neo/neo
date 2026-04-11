@@ -98,6 +98,13 @@ export default function AdminPage() {
   const { toast, show } = useToast();
 
   useEffect(() => {
+    const tabParam = new URLSearchParams(window.location.search).get("tab") as Tab | null;
+    if (tabParam && TABS.some((item) => item.key === tabParam)) {
+      setTab(tabParam);
+    }
+  }, []);
+
+  useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const code = params.get("code");
     if (code) {

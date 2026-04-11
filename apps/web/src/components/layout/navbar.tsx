@@ -15,16 +15,24 @@ const NAV_ITEMS: { key: TKey; href: string }[] = [
   { key: "nav.guestbook", href: "/guestbook" },
 ];
 
-export function Navbar() {
+const ADMIN_NAV_ITEMS: { key: TKey; href: string }[] = [
+  { key: "admin.dashboard", href: "/admin" },
+  { key: "admin.viewSite", href: "/" },
+];
+
+export function Navbar({ mode = "site" }: { mode?: "site" | "admin" }) {
   const pathname = usePathname();
   const { t } = useI18n();
   const [chatOpen, setChatOpen] = useState(false);
+  const isAdmin = mode === "admin";
+  const navItems = isAdmin ? ADMIN_NAV_ITEMS : NAV_ITEMS;
 
   useEffect(() => {
+    if (isAdmin) return;
     const handler = () => setChatOpen(true);
     window.addEventListener("neo-open-chat", handler);
     return () => window.removeEventListener("neo-open-chat", handler);
-  }, []);
+  }, [isAdmin]);
 
   return (
     <>
@@ -37,13 +45,13 @@ export function Navbar() {
         <div className="mx-auto max-w-6xl px-6">
           <nav className="mt-4 flex h-12 items-center justify-between rounded-full border border-stone-300/30 bg-white/50 px-6 shadow-sm shadow-stone-300/10 backdrop-blur-2xl">
             <Link
-              href="/"
+              href={isAdmin ? "/admin" : "/"}
               className="text-lg font-bold tracking-tight text-stone-800 transition-colors hover:text-orange-600"
             >
-              Neo
+              {isAdmin ? "Neo Admin" : "Neo"}
             </Link>
             <ul className="flex items-center gap-1">
-              {NAV_ITEMS.map((item) => {
+              {navItems.map((item) => {
                 const active = pathname === item.href;
                 return (
                   <li key={item.href}>
@@ -72,22 +80,23 @@ export function Navbar() {
                 );
               })}
 
-              {/* AI Chat button */}
-              <li>
-                <button
-                  onClick={() => setChatOpen(true)}
-                  className="relative ml-1 flex items-center gap-1.5 rounded-full border border-orange-400/30 bg-gradient-to-r from-red-600/10 to-orange-500/10 px-3.5 py-1.5 text-sm font-medium text-orange-600 transition-all hover:from-red-600/20 hover:to-orange-500/20 hover:shadow-sm"
-                >
-                  <span className="relative flex h-1.5 w-1.5">
-                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-orange-500 opacity-75" />
-                    <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-orange-500" />
-                  </span>
-                  <span className="hidden sm:inline">NEO-AI</span>
-                  <svg className="h-3.5 w-3.5 sm:hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
-                  </svg>
-                </button>
-              </li>
+              {!isAdmin && (
+                <li>
+                  <button
+                    onClick={() => setChatOpen(true)}
+                    className="relative ml-1 flex items-center gap-1.5 rounded-full border border-orange-400/30 bg-gradient-to-r from-red-600/10 to-orange-500/10 px-3.5 py-1.5 text-sm font-medium text-orange-600 transition-all hover:from-red-600/20 hover:to-orange-500/20 hover:shadow-sm"
+                  >
+                    <span className="relative flex h-1.5 w-1.5">
+                      <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-orange-500 opacity-75" />
+                      <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-orange-500" />
+                    </span>
+                    <span className="hidden sm:inline">NEO-AI</span>
+                    <svg className="h-3.5 w-3.5 sm:hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+                    </svg>
+                  </button>
+                </li>
+              )}
 
               <li>
                 <LocaleToggle className="ml-2 text-stone-500" />
@@ -97,7 +106,7 @@ export function Navbar() {
         </div>
       </motion.header>
 
-      <ChatPanel open={chatOpen} onClose={() => setChatOpen(false)} />
+      {!isAdmin && <ChatPanel open={chatOpen} onClose={() => setChatOpen(false)} />}
     </>
   );
 }
