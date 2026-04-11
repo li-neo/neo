@@ -13,10 +13,24 @@ SERVER_IP="101.96.207.11"
 # 中文: 统一收口外部源，便于在国内 ECS 环境快速切换镜像。
 # EN: Centralize external sources so they can be switched easily in mainland ECS.
 GIT_REPO_URL="${GIT_REPO_URL:-https://github.com/li-neo/neo.git}"
-UV_INSTALLER_URL="${UV_INSTALLER_URL:-https://astral.sh/uv/install.sh}"
-UV_INDEX_URL="${UV_INDEX_URL:-https://pypi.tuna.tsinghua.edu.cn/simple}"
+PIP_INDEX_URL="${PIP_INDEX_URL:-https://pypi.tuna.tsinghua.edu.cn/simple}"
 NPM_REGISTRY="${NPM_REGISTRY:-https://registry.npmmirror.com}"
 NODESOURCE_SETUP_URL="${NODESOURCE_SETUP_URL:-https://rpm.nodesource.com/setup_22.x}"
+VENV_DIR="${VENV_DIR:-${PROJECT_DIR}/server/.venv}"
+
+# ---------- Site / Auth ----------
+# 中文: 生产环境域名、公开 API 地址、GitHub OAuth 参数统一从环境变量注入。
+# EN: Production domains, public API base URL and GitHub OAuth settings are injected via env vars.
+PRIMARY_DOMAIN="${PRIMARY_DOMAIN:-li-neo.top}"
+WWW_DOMAIN="${WWW_DOMAIN:-www.li-neo.top}"
+SITE_SCHEME="${SITE_SCHEME:-https}"
+SITE_URL="${SITE_URL:-${SITE_SCHEME}://${PRIMARY_DOMAIN}}"
+SITE_URL_WWW="${SITE_URL_WWW:-${SITE_SCHEME}://${WWW_DOMAIN}}"
+PUBLIC_API_BASE_URL="${PUBLIC_API_BASE_URL:-${SITE_URL}}"
+ADMIN_GITHUB_USERS="${ADMIN_GITHUB_USERS:-2995183552@qq.com}"
+GITHUB_CLIENT_ID="${GITHUB_CLIENT_ID:-}"
+GITHUB_CLIENT_SECRET="${GITHUB_CLIENT_SECRET:-}"
+GITHUB_REDIRECT_URI="${GITHUB_REDIRECT_URI:-${SITE_URL}/api/v1/auth/github/callback}"
 
 info()  { echo -e "\n\033[1;34m>>> $*\033[0m"; }
 ok()    { echo -e "\033[1;32m  ✔ $*\033[0m"; }
@@ -55,24 +69,18 @@ else
     }
 fi
 
-# ── 3. 安装 uv ──
-info "3/8 安装 uv"
-export PATH="$HOME/.local/bin:$PATH"
-if command -v uv &>/dev/null; then
-    ok "uv 已存在: $(uv --version)"
-else
-    curl -LsSf "$UV_INSTALLER_URL" | sh
-    export PATH="$HOME/.local/bin:$PATH"
-    grep -q '.local/bin' /root/.bashrc || echo 'export PATH="$HOME/.local/bin:$PATH"' >> /root/.bashrc
-    ok "uv 已安装: $(uv --version)"
-fi
+# ── 3. 检查 pip / venv ──
+info "3/8 检查 pip / venv"
+python3 -m pip --version >/dev/null 2>&1 || dnf install -y python3-pip
+python3 -m venv --help >/dev/null 2>&1 || dnf install -y python3.12-pip
+ok "pip 已就绪: $(python3 -m pip --version | awk '{print $1, $2}')"
 
 # ── 4. 安装 Node.js 22 + pnpm ──
 info "4/8 安装 Node.js 22 + pnpm"
 if node --version 2>/dev/null | grep -q "v2[2-9]"; then
     ok "Node.js 已存在: $(node --version)"
 else
-    curl -fsSL "$NODESOURCE_SETUP_URL" | bash - >/dev/null 2>&1
+    curl --retry 3 --retry-delay 2 --retry-all-errors -fsSL "$NODESOURCE_SETUP_URL" | bash - >/dev/null 2>&1
     dnf install -y -q nodejs
     ok "Node.js: $(node --version)"
 fi
@@ -124,9 +132,20 @@ fi
 # 后端
 info "  → 安装后端 Python 依赖"
 cd "$PROJECT_DIR/server"
-export UV_INDEX_URL
-info "     Python 镜像源: ${UV_INDEX_URL}"
-uv sync --frozen -v 2>&1 | tee /tmp/neo-uv-sync.log
+export PIP_DISABLE_PIP_VERSION_CHECK=1
+info "     Python 镜像源: ${PIP_INDEX_URL}"
+python3 -m venv "$VENV_DIR"
+"$VENV_DIR/bin/python" -m pip install -U pip setuptools wheel -i "$PIP_INDEX_URL" --default-timeout=120 2>&1 | tee /tmp/neo-pip-bootstrap.log
+mapfile -t PY_DEPS < <("$VENV_DIR/bin/python" - <<'PY'
+import tomllib
+from pathlib import Path
+
+data = tomllib.loads(Path("pyproject.toml").read_text(encoding="utf-8"))
+for dep in data.get("project", {}).get("dependencies", []):
+    print(dep)
+PY
+)
+"$VENV_DIR/bin/pip" install "${PY_DEPS[@]}" -i "$PIP_INDEX_URL" --default-timeout=120 2>&1 | tee /tmp/neo-pip-install.log
 mkdir -p uploads
 ok "后端依赖就绪"
 
@@ -135,7 +154,7 @@ info "  → 安装前端依赖 & 构建"
 cd "$PROJECT_DIR/apps/web"
 info "     NPM / pnpm 镜像源: ${NPM_REGISTRY}"
 pnpm install --frozen-lockfile 2>&1 | tee /tmp/neo-pnpm-install.log
-NEXT_PUBLIC_API_URL="http://127.0.0.1:8000" pnpm build 2>&1 | tee /tmp/neo-pnpm-build.log
+NEXT_PUBLIC_API_URL="${PUBLIC_API_BASE_URL}" NEXT_PUBLIC_SITE_URL="${SITE_URL}" pnpm build 2>&1 | tee /tmp/neo-pnpm-build.log
 ok "前端构建完成"
 
 # ── 8. 生成配置 & systemd 服务 ──
@@ -160,13 +179,16 @@ MYSQL_DATABASE=neo
 API_HOST=0.0.0.0
 API_PORT=8000
 API_PREFIX=/api/v1
-CORS_ORIGINS=["https://li-neo.top","https://www.li-neo.top","http://${SERVER_IP}"]
+CORS_ORIGINS=["${SITE_URL}","${SITE_URL_WWW}","http://${SERVER_IP}"]
 
-GITHUB_CLIENT_ID=Ov23liDKwcyG0mU9nfIW
-GITHUB_CLIENT_SECRET=3125e66c1806dfd611409bca20a9b2471b28a68b
-GITHUB_REDIRECT_URI=https://li-neo.top/admin
+NEXT_PUBLIC_API_URL=${PUBLIC_API_BASE_URL}
+NEXT_PUBLIC_SITE_URL=${SITE_URL}
 
-ADMIN_GITHUB_USERS=2995183552@qq.com
+GITHUB_CLIENT_ID=${GITHUB_CLIENT_ID}
+GITHUB_CLIENT_SECRET=${GITHUB_CLIENT_SECRET}
+GITHUB_REDIRECT_URI=${GITHUB_REDIRECT_URI}
+
+ADMIN_GITHUB_USERS=${ADMIN_GITHUB_USERS}
 
 JWT_SECRET_KEY=${JWT_SECRET}
 JWT_ALGORITHM=HS256
@@ -194,7 +216,7 @@ limit_req_zone $binary_remote_addr zone=api:10m rate=30r/s;
 
 server {
     listen 80;
-    server_name li-neo.top www.li-neo.top _;
+    server_name ${PRIMARY_DOMAIN} ${WWW_DOMAIN} _;
 
     client_max_body_size 50m;
     gzip on;
@@ -233,7 +255,6 @@ NGEOF
 ok "Nginx 配置就绪"
 
 # — systemd: neo-server —
-UV_BIN=$(which uv)
 cat > /etc/systemd/system/neo-server.service << SVCEOF
 [Unit]
 Description=Neo Backend (FastAPI)
@@ -245,8 +266,7 @@ Type=simple
 User=root
 WorkingDirectory=${PROJECT_DIR}/server
 EnvironmentFile=${PROJECT_DIR}/.env
-Environment=PATH=${HOME}/.local/bin:/usr/local/bin:/usr/bin:/bin
-ExecStart=${UV_BIN} run uvicorn app.main:app --host 0.0.0.0 --port 8000
+ExecStart=${VENV_DIR}/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port 8000
 Restart=always
 RestartSec=5
 
@@ -268,7 +288,8 @@ WorkingDirectory=${PROJECT_DIR}/apps/web
 Environment=NODE_ENV=production
 Environment=PORT=3000
 Environment=HOSTNAME=0.0.0.0
-Environment=NEXT_PUBLIC_API_URL=http://127.0.0.1:8000
+Environment=NEXT_PUBLIC_API_URL=${PUBLIC_API_BASE_URL}
+Environment=NEXT_PUBLIC_SITE_URL=${SITE_URL}
 ExecStart=${NODE_BIN} .next/standalone/server.js
 Restart=always
 RestartSec=5
@@ -289,7 +310,7 @@ ok "防火墙配置就绪"
 # — 数据库迁移 —
 info "执行数据库迁移"
 cd "$PROJECT_DIR/server"
-uv run alembic upgrade head 2>&1 | tail -5
+"$VENV_DIR/bin/python" -m alembic upgrade head 2>&1 | tee /tmp/neo-db-upgrade.log
 ok "数据库迁移完成"
 
 # — 启动全部服务 —
