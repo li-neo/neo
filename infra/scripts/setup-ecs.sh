@@ -9,6 +9,15 @@ set -euo pipefail
 PROJECT_DIR=/opt/neo
 SERVER_IP="101.96.207.11"
 
+# ---------- Mirrors / Sources ----------
+# 中文: 统一收口外部源，便于在国内 ECS 环境快速切换镜像。
+# EN: Centralize external sources so they can be switched easily in mainland ECS.
+GIT_REPO_URL="${GIT_REPO_URL:-https://github.com/li-neo/neo.git}"
+UV_INSTALLER_URL="${UV_INSTALLER_URL:-https://astral.sh/uv/install.sh}"
+UV_INDEX_URL="${UV_INDEX_URL:-https://pypi.tuna.tsinghua.edu.cn/simple}"
+NPM_REGISTRY="${NPM_REGISTRY:-https://registry.npmmirror.com}"
+NODESOURCE_SETUP_URL="${NODESOURCE_SETUP_URL:-https://rpm.nodesource.com/setup_22.x}"
+
 info()  { echo -e "\n\033[1;34m>>> $*\033[0m"; }
 ok()    { echo -e "\033[1;32m  ✔ $*\033[0m"; }
 warn()  { echo -e "\033[1;33m  ⚠ $*\033[0m"; }
@@ -52,7 +61,7 @@ export PATH="$HOME/.local/bin:$PATH"
 if command -v uv &>/dev/null; then
     ok "uv 已存在: $(uv --version)"
 else
-    curl -LsSf https://astral.sh/uv/install.sh | sh
+    curl -LsSf "$UV_INSTALLER_URL" | sh
     export PATH="$HOME/.local/bin:$PATH"
     grep -q '.local/bin' /root/.bashrc || echo 'export PATH="$HOME/.local/bin:$PATH"' >> /root/.bashrc
     ok "uv 已安装: $(uv --version)"
@@ -63,11 +72,12 @@ info "4/8 安装 Node.js 22 + pnpm"
 if node --version 2>/dev/null | grep -q "v2[2-9]"; then
     ok "Node.js 已存在: $(node --version)"
 else
-    curl -fsSL https://rpm.nodesource.com/setup_22.x | bash - >/dev/null 2>&1
+    curl -fsSL "$NODESOURCE_SETUP_URL" | bash - >/dev/null 2>&1
     dnf install -y -q nodejs
     ok "Node.js: $(node --version)"
 fi
-command -v pnpm &>/dev/null || npm install -g pnpm >/dev/null 2>&1
+command -v pnpm &>/dev/null || npm install -g pnpm --registry "$NPM_REGISTRY" >/dev/null 2>&1
+pnpm config set registry "$NPM_REGISTRY" >/dev/null 2>&1 || true
 ok "pnpm: $(pnpm --version)"
 
 # ── 5. 安装 MySQL 8 ──
@@ -105,7 +115,8 @@ if [ -d "$PROJECT_DIR/.git" ]; then
     cd "$PROJECT_DIR" && git pull origin main
     ok "代码已更新"
 else
-    git clone https://github.com/li-neo/neo.git "$PROJECT_DIR"
+    info "  → 拉取仓库: ${GIT_REPO_URL}"
+    git clone "$GIT_REPO_URL" "$PROJECT_DIR"
     cd "$PROJECT_DIR"
     ok "代码已拉取"
 fi
@@ -113,15 +124,18 @@ fi
 # 后端
 info "  → 安装后端 Python 依赖"
 cd "$PROJECT_DIR/server"
-uv sync --frozen 2>&1 | tail -3
+export UV_INDEX_URL
+info "     Python 镜像源: ${UV_INDEX_URL}"
+uv sync --frozen -v 2>&1 | tee /tmp/neo-uv-sync.log
 mkdir -p uploads
 ok "后端依赖就绪"
 
 # 前端
 info "  → 安装前端依赖 & 构建"
 cd "$PROJECT_DIR/apps/web"
-pnpm install --frozen-lockfile 2>&1 | tail -3
-NEXT_PUBLIC_API_URL="http://127.0.0.1:8000" pnpm build 2>&1 | tail -5
+info "     NPM / pnpm 镜像源: ${NPM_REGISTRY}"
+pnpm install --frozen-lockfile 2>&1 | tee /tmp/neo-pnpm-install.log
+NEXT_PUBLIC_API_URL="http://127.0.0.1:8000" pnpm build 2>&1 | tee /tmp/neo-pnpm-build.log
 ok "前端构建完成"
 
 # ── 8. 生成配置 & systemd 服务 ──
