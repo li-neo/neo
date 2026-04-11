@@ -97,11 +97,17 @@ export const SCENE = {
   /** 粒子基础大小（像素） */
   PARTICLE_SIZE: 16.0,
 
-  /** 缩放进入后粒子放大倍数 (1.0 = 不放大) */
+  /** 缩放进入后粒子(GL_POINTS)放大倍数 (1.0 = 不放大) */
   ZOOM_GROW_MAX: 2.8,
 
   /** 缩放进入后密度剔除系数 (越大 → 隐藏越多粒子)，范围 0~1，推荐 0.8~0.95 */
   ZOOM_DENSITY_CULL: 0.95,
+
+  /** 3D 天体放大倍数上限（保持小尺度，避免失真） */
+  BODY_ZOOM_GROW_MAX: 1.3,
+
+  /** 3D 天体密度剔除系数（越大 → 越稀疏），滚动到底时隐藏此比例的天体 */
+  BODY_DENSITY_CULL: 0.97,
 
   /** 光源位置 [x, y, z] */
   LIGHT_POS: [5, 4, 8] as [number, number, number],

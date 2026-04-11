@@ -273,8 +273,8 @@ function BodyGroup({ alloc, posData, time, scroll, camPos }: {
     meshRef.current.visible = true;
     if (ringRef.current) ringRef.current.visible = true;
 
-    const zoomGrow = 1 + (C.ZOOM_GROW_MAX - 1) * sp * sp;
-    const cullTh = sp * sp * C.ZOOM_DENSITY_CULL;
+    const zoomGrow = 1 + (C.BODY_ZOOM_GROW_MAX - 1) * bodyT;
+    const cullTh = bodyT * C.BODY_DENSITY_CULL;
     const mesh = meshRef.current;
     const hasRing = ringRef.current && (alloc.type === BodyType.RingPlanet || alloc.type === BodyType.BlackHole);
 
@@ -286,13 +286,12 @@ function BodyGroup({ alloc, posData, time, scroll, camPos }: {
       const px = pd[i4], py = pd[i4 + 1], pz = pd[i4 + 2];
       const life = pd[i4 + 3];
 
-      // depth-based culling: particles closer to camera are hidden first
       const dx = px - cx, dy = py - cy, dz = pz - cz;
       const camDist = Math.sqrt(dx * dx + dy * dy + dz * dz);
-      const nearFade = Math.min(1, camDist * 0.8);
+      const nearFade = Math.min(1, Math.max(0, (camDist - 0.3) * 0.6));
 
       const cullRand = alloc.seeds[j];
-      const visible = life > 0.01 && cullRand > cullTh && nearFade > 0.15;
+      const visible = life > 0.01 && cullRand > cullTh && nearFade > 0.1;
       const s = visible ? alloc.scales[j] * zoomGrow * bodyT * nearFade : 0;
 
       _dummy.position.set(px, py, pz);
