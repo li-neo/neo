@@ -8,6 +8,7 @@ set -euo pipefail
 
 PROJECT_DIR=/opt/neo
 SERVER_IP="101.96.207.11"
+ENV_FILE="${PROJECT_DIR}/.env"
 
 # ---------- Mirrors / Sources ----------
 # 中文: 统一收口外部源，便于在国内 ECS 环境快速切换镜像。
@@ -35,6 +36,45 @@ GITHUB_REDIRECT_URI="${GITHUB_REDIRECT_URI:-${SITE_URL}/api/v1/auth/github/callb
 info()  { echo -e "\n\033[1;34m>>> $*\033[0m"; }
 ok()    { echo -e "\033[1;32m  ✔ $*\033[0m"; }
 warn()  { echo -e "\033[1;33m  ⚠ $*\033[0m"; }
+
+read_env_value() {
+    local key="$1"
+    local default_value="${2:-}"
+
+    if [ -f "$ENV_FILE" ]; then
+        local line
+        line=$(grep -E "^${key}=" "$ENV_FILE" | tail -n 1 || true)
+        if [ -n "$line" ]; then
+            printf '%s' "${line#*=}"
+            return
+        fi
+    fi
+
+    printf '%s' "$default_value"
+}
+
+if [ -f "$ENV_FILE" ]; then
+    EXISTING_SITE_URL="$(read_env_value NEXT_PUBLIC_SITE_URL "")"
+    EXISTING_API_URL="$(read_env_value NEXT_PUBLIC_API_URL "")"
+    EXISTING_GITHUB_CLIENT_ID="$(read_env_value GITHUB_CLIENT_ID "")"
+    EXISTING_GITHUB_CLIENT_SECRET="$(read_env_value GITHUB_CLIENT_SECRET "")"
+    EXISTING_GITHUB_REDIRECT_URI="$(read_env_value GITHUB_REDIRECT_URI "")"
+    EXISTING_ADMIN_GITHUB_USERS="$(read_env_value ADMIN_GITHUB_USERS "")"
+
+    if [ -n "$EXISTING_SITE_URL" ]; then
+        SITE_URL="$EXISTING_SITE_URL"
+        SITE_SCHEME="$(printf '%s' "$SITE_URL" | sed -E 's,^(https?)://.*,\1,')"
+        PRIMARY_DOMAIN="$(printf '%s' "$SITE_URL" | sed -E 's,^https?://([^/:]+).*,\1,')"
+        WWW_DOMAIN="www.${PRIMARY_DOMAIN#www.}"
+        SITE_URL_WWW="${SITE_SCHEME}://${WWW_DOMAIN}"
+    fi
+
+    [ -n "$EXISTING_API_URL" ] && PUBLIC_API_BASE_URL="$EXISTING_API_URL"
+    [ -n "$EXISTING_GITHUB_CLIENT_ID" ] && GITHUB_CLIENT_ID="$EXISTING_GITHUB_CLIENT_ID"
+    [ -n "$EXISTING_GITHUB_CLIENT_SECRET" ] && GITHUB_CLIENT_SECRET="$EXISTING_GITHUB_CLIENT_SECRET"
+    [ -n "$EXISTING_GITHUB_REDIRECT_URI" ] && GITHUB_REDIRECT_URI="$EXISTING_GITHUB_REDIRECT_URI"
+    [ -n "$EXISTING_ADMIN_GITHUB_USERS" ] && ADMIN_GITHUB_USERS="$EXISTING_ADMIN_GITHUB_USERS"
+fi
 
 echo "╔═══════════════════════════════════════════╗"
 echo "║   Neo 项目 — 裸机部署 (无 Docker)        ║"
@@ -98,14 +138,25 @@ else
     ok "MySQL 已安装并启动"
 fi
 
-MYSQL_PW=$(openssl rand -hex 16)
-mysql -u root <<SQLEOF 2>/dev/null || true
-CREATE DATABASE IF NOT EXISTS neo CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-CREATE USER IF NOT EXISTS 'neo'@'localhost' IDENTIFIED BY '${MYSQL_PW}';
-GRANT ALL PRIVILEGES ON neo.* TO 'neo'@'localhost';
+MYSQL_HOST="$(read_env_value MYSQL_HOST "localhost")"
+MYSQL_PORT="$(read_env_value MYSQL_PORT "3306")"
+MYSQL_USER="$(read_env_value MYSQL_USER "neo")"
+MYSQL_DATABASE="$(read_env_value MYSQL_DATABASE "neo")"
+MYSQL_PW="$(read_env_value MYSQL_PASSWORD "")"
+[ -n "$MYSQL_PW" ] || MYSQL_PW=$(openssl rand -hex 16)
+
+if [ "$MYSQL_HOST" = "localhost" ] || [ "$MYSQL_HOST" = "127.0.0.1" ]; then
+mysql -u root <<SQLEOF
+CREATE DATABASE IF NOT EXISTS ${MYSQL_DATABASE} CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE USER IF NOT EXISTS '${MYSQL_USER}'@'localhost' IDENTIFIED BY '${MYSQL_PW}';
+ALTER USER '${MYSQL_USER}'@'localhost' IDENTIFIED BY '${MYSQL_PW}';
+GRANT ALL PRIVILEGES ON ${MYSQL_DATABASE}.* TO '${MYSQL_USER}'@'localhost';
 FLUSH PRIVILEGES;
 SQLEOF
-ok "数据库 neo 就绪, 密码: ${MYSQL_PW}"
+    ok "数据库 ${MYSQL_DATABASE} 就绪"
+else
+    warn "检测到 MYSQL_HOST=${MYSQL_HOST}，跳过本机 MySQL 用户初始化"
+fi
 
 # ── 6. 安装 Nginx ──
 info "6/8 安装 Nginx"
@@ -163,18 +214,26 @@ info "8/8 配置文件 & 服务"
 SECRET_KEY=$(openssl rand -hex 32)
 JWT_SECRET=$(openssl rand -hex 32)
 
+if [ -f "$ENV_FILE" ]; then
+    SECRET_KEY="$(read_env_value SECRET_KEY "$SECRET_KEY")"
+    JWT_SECRET="$(read_env_value JWT_SECRET_KEY "$JWT_SECRET")"
+fi
+
 # — .env —
-cat > "$PROJECT_DIR/.env" << ENVEOF
+if [ -f "$ENV_FILE" ]; then
+    ok ".env 已存在，保留现有配置"
+else
+cat > "$ENV_FILE" << ENVEOF
 APP_NAME=neo
 APP_ENV=production
 DEBUG=false
 SECRET_KEY=${SECRET_KEY}
 
-MYSQL_HOST=localhost
-MYSQL_PORT=3306
-MYSQL_USER=neo
+MYSQL_HOST=${MYSQL_HOST}
+MYSQL_PORT=${MYSQL_PORT}
+MYSQL_USER=${MYSQL_USER}
 MYSQL_PASSWORD=${MYSQL_PW}
-MYSQL_DATABASE=neo
+MYSQL_DATABASE=${MYSQL_DATABASE}
 
 API_HOST=0.0.0.0
 API_PORT=8000
@@ -204,15 +263,16 @@ MCP_ENABLED=false
 CHAT_SYSTEM_PROMPT=
 ENVEOF
 ok ".env 已生成（密钥自动随机）"
+fi
 
 # — Nginx —
 # 先删掉默认 server 块，避免端口冲突
 rm -f /etc/nginx/conf.d/default.conf
-cat > /etc/nginx/conf.d/neo.conf << 'NGEOF'
+cat > /etc/nginx/conf.d/neo.conf <<NGEOF
 upstream neo_web { server 127.0.0.1:3000; }
 upstream neo_api { server 127.0.0.1:8000; }
 
-limit_req_zone $binary_remote_addr zone=api:10m rate=30r/s;
+limit_req_zone \$binary_remote_addr zone=api:10m rate=30r/s;
 
 server {
     listen 80;
@@ -225,10 +285,10 @@ server {
     location /api/ {
         limit_req zone=api burst=20 nodelay;
         proxy_pass http://neo_api;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
         proxy_read_timeout 180s;
         proxy_buffering off;
         proxy_cache off;
@@ -242,12 +302,12 @@ server {
 
     location / {
         proxy_pass http://neo_web;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
         proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Upgrade \$http_upgrade;
         proxy_set_header Connection "upgrade";
     }
 }
@@ -285,11 +345,10 @@ After=network.target neo-server.service
 Type=simple
 User=root
 WorkingDirectory=${PROJECT_DIR}/apps/web
+EnvironmentFile=${ENV_FILE}
 Environment=NODE_ENV=production
 Environment=PORT=3000
 Environment=HOSTNAME=0.0.0.0
-Environment=NEXT_PUBLIC_API_URL=${PUBLIC_API_BASE_URL}
-Environment=NEXT_PUBLIC_SITE_URL=${SITE_URL}
 ExecStart=${NODE_BIN} .next/standalone/server.js
 Restart=always
 RestartSec=5
@@ -322,6 +381,7 @@ systemctl restart neo-server
 sleep 3
 systemctl restart neo-web
 sleep 2
+nginx -t
 systemctl restart nginx
 
 echo ""
