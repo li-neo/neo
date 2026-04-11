@@ -4,10 +4,10 @@ import { useRef, useMemo, useEffect, useCallback } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import * as THREE from "three";
 
-const TEX = 256;
+const TEX = 128;
 const COUNT = TEX * TEX;
 const R = 2.85;
-const SHAPE_TH = 0.18;
+const SHAPE_TH = 0.35;
 
 const ndcMouseRC = new THREE.Vector2(0, 0);
 const mouse3D = new THREE.Vector3(0, 0, 0);
@@ -182,7 +182,7 @@ void main(){
 /* ─── Vertex: solid stars, 4 color classes via vColorClass ─── */
 const PT_VERT = /* glsl */ `
 uniform sampler2D tPosition, tVelocity;
-uniform float uTime, uDpr, uSize, uShapeThreshold, uClickPulse;
+uniform float uTime, uDpr, uSize, uShapeThreshold, uClickPulse, uScroll;
 uniform vec3 uLightPos;
 attribute vec2 aFboUv;
 attribute float aSeed, aScale;
@@ -195,19 +195,19 @@ void main(){
   vec3 pos=sim.xyz; float life=sim.w;
   float rIdx=rand(aFboUv);
   float selected=step(uShapeThreshold,rIdx);
-  // color class: deterministic per particle
   float cc=fract(aSeed*91743.1);
   vColorClass=cc;
-  // size varies by star type
-  float scale=uSize*aScale;
+  // shrink particles as camera zooms in to maintain sparsity
+  float zoomShrink=mix(1.0,0.35,uScroll*uScroll);
+  float scale=uSize*aScale*zoomShrink;
   if(selected>0.5){
-    if(cc<0.25) scale*=mix(0.6,1.2,aRandom.x);       // white: medium-large
-    else if(cc<0.50) scale*=mix(0.4,0.9,aRandom.x);   // burgundy: small-medium
-    else if(cc<0.65) scale*=mix(0.5,1.0,aRandom.x);   // blue-white: medium
-    else scale*=mix(0.35,1.1,aRandom.x);               // orange: varied
-    if(aRandom.z>0.94) scale*=2.2;
+    if(cc<0.25) scale*=mix(0.5,1.0,aRandom.x);
+    else if(cc<0.50) scale*=mix(0.35,0.8,aRandom.x);
+    else if(cc<0.65) scale*=mix(0.4,0.9,aRandom.x);
+    else scale*=mix(0.3,0.9,aRandom.x);
+    if(aRandom.z>0.95) scale*=1.8;
   } else {
-    scale*=1.5*mix(0.5,1.2,aRandom.y);
+    scale*=1.3*mix(0.4,1.0,aRandom.y);
   }
   scale*=smoothstep(0.0,0.15,life)*smoothstep(1.0,0.88,life);
   scale*=(1.0+uClickPulse*0.25);
@@ -352,8 +352,9 @@ function FBOSystem() {
     uniforms: {
       tPosition: { value: null }, tVelocity: { value: null }, uTime: { value: 0 },
       uDpr: { value: typeof window !== "undefined" ? Math.min(window.devicePixelRatio, 2) : 1 },
-      uSize: { value: 20.0 }, uLightPos: { value: new THREE.Vector3(5, 4, 8) },
+      uSize: { value: 16.0 }, uLightPos: { value: new THREE.Vector3(5, 4, 8) },
       uShapeThreshold: { value: SHAPE_TH }, uClickPulse: { value: 0 },
+      uScroll: { value: 0 },
     },
     vertexShader: PT_VERT, fragmentShader: PT_FRAG,
     transparent: true, depthTest: false, depthWrite: false, blending: THREE.AdditiveBlending,
@@ -397,6 +398,7 @@ function FBOSystem() {
     ptMat.uniforms.tVelocity.value = vRT[ping.current.v].texture;
     ptMat.uniforms.uTime.value = t;
     ptMat.uniforms.uClickPulse.value = clickPulse.value;
+    ptMat.uniforms.uScroll.value = scrollRef.value;
     if (ref.current) ref.current.rotation.y += dt * 0.08;
   });
 
