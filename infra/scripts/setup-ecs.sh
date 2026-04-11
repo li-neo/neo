@@ -23,8 +23,21 @@ dnf install -y git curl wget unzip vim firewalld
 echo ""
 echo "=== 2/7 安装 Docker ==="
 if ! command -v docker &>/dev/null; then
-    dnf config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
+    # 使用阿里云镜像源（国内 ECS 无法访问 docker.com）
+    dnf config-manager --add-repo https://mirrors.aliyun.com/docker-ce/linux/centos/docker-ce.repo
+    sed -i 's+download.docker.com+mirrors.aliyun.com/docker-ce+' /etc/yum.repos.d/docker-ce.repo
+    dnf makecache
     dnf install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
+    # 配置 Docker 镜像加速
+    mkdir -p /etc/docker
+    cat > /etc/docker/daemon.json << 'DJEOF'
+{
+  "registry-mirrors": [
+    "https://mirror.ccs.tencentyun.com",
+    "https://docker.mirrors.ustc.edu.cn"
+  ]
+}
+DJEOF
     systemctl enable docker
     systemctl start docker
     echo "Docker 已安装: $(docker --version)"
