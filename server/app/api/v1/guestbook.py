@@ -9,7 +9,7 @@ from app.core.response import success, paginated
 from app.api.deps import pagination
 from app.models.guestbook import GuestbookEntry
 from app.models.user import User
-from app.schemas.guestbook import GuestbookCreate
+from app.schemas.guestbook import GuestbookCreate, GuestbookUpdate
 from app.schemas.common import PaginationParams
 
 router = APIRouter()
@@ -103,3 +103,36 @@ def delete_entry(entry_id: int, _admin=Depends(get_admin_user), db: Session = De
     db.delete(entry)
     db.commit()
     return success(message="Deleted")
+
+
+@router.put("/{entry_id}")
+def update_entry(
+    entry_id: int,
+    body: GuestbookUpdate,
+    _admin=Depends(get_admin_user),
+    db: Session = Depends(get_db),
+):
+    entry = db.query(GuestbookEntry).filter(GuestbookEntry.id == entry_id).first()
+    if not entry:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Entry not found")
+
+    entry.message = body.message
+    if entry.user_id is None:
+        entry.nickname = body.nickname
+    db.add(entry)
+    db.commit()
+    db.refresh(entry)
+
+    user = db.query(User).filter(User.id == entry.user_id).first() if entry.user_id else None
+    if user:
+        user_info = {"id": user.id, "username": user.username, "avatar_url": user.avatar_url}
+    else:
+        display = entry.nickname or f"Visitor-{entry.visitor_id[:6]}" if entry.visitor_id else "Anonymous"
+        user_info = {"id": 0, "username": display, "avatar_url": None}
+
+    return success(data={
+        "id": entry.id,
+        "message": entry.message,
+        "created_at": entry.created_at.isoformat(),
+        "user": user_info,
+    })

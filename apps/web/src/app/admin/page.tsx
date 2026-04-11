@@ -354,8 +354,11 @@ function ProjectsPanel({ token, t, toast }: PanelProps) {
   const [saving, setSaving] = useState(false);
 
   const load = useCallback(() => {
-    api.projects.list("page_size=100", { cache: "no-store" }).then(r => setProjects(r.data ?? []));
-  }, []);
+    api.projects.list("include_all=true&page_size=100", {
+      cache: "no-store",
+      headers: { Authorization: `Bearer ${token}` },
+    }).then(r => setProjects(r.data ?? []));
+  }, [token]);
   useEffect(load, [load]);
 
   const save = async () => {
@@ -425,7 +428,7 @@ function skillFields(t: (k: TKey) => string): FieldDef[] {
     { key: "platform", label: t("admin.fPlatform"), type: "select", options: ["openclaw", "mcp", "other"] },
     { key: "install_command", label: t("admin.fInstallCmd"), type: "text" },
     { key: "source_url", label: t("admin.fSourceUrl"), type: "text" },
-    { key: "status", label: t("admin.fStatus"), type: "select", options: ["published", "draft"] },
+    { key: "status", label: t("admin.fStatus"), type: "select", options: ["published", "draft", "archived"] },
   ];
 }
 
@@ -435,8 +438,11 @@ function SkillsPanel({ token, t, toast }: PanelProps) {
   const [saving, setSaving] = useState(false);
 
   const load = useCallback(() => {
-    api.skills.list("page_size=100", { cache: "no-store" }).then(r => setSkills(r.data ?? []));
-  }, []);
+    api.skills.list("include_all=true&page_size=100", {
+      cache: "no-store",
+      headers: { Authorization: `Bearer ${token}` },
+    }).then(r => setSkills(r.data ?? []));
+  }, [token]);
   useEffect(load, [load]);
 
   const save = async () => {
@@ -473,7 +479,7 @@ function SkillsPanel({ token, t, toast }: PanelProps) {
           <div key={s.slug} className="flex items-center justify-between rounded-xl border border-border/50 bg-card p-4">
             <div>
               <p className="font-semibold">{s.name}</p>
-              <p className="text-xs text-muted-foreground">{s.slug} · {s.category} · v{s.version}</p>
+              <p className="text-xs text-muted-foreground">{s.slug} · {s.category} · {s.status} · v{s.version}</p>
             </div>
             <div className="flex gap-2">
               <button onClick={() => setEditing({ ...s })} className="rounded-lg border px-3 py-1 text-xs hover:bg-muted">{t("admin.edit")}</button>
@@ -535,8 +541,11 @@ function BlogPanel({ token, t, toast }: PanelProps) {
   const docRef = useRef<HTMLInputElement>(null);
 
   const load = useCallback(() => {
-    api.posts.list("page_size=100", { cache: "no-store" }).then(r => setPosts(r.data ?? []));
-  }, []);
+    api.posts.list("include_all=true&page_size=100", {
+      cache: "no-store",
+      headers: { Authorization: `Bearer ${token}` },
+    }).then(r => setPosts(r.data ?? []));
+  }, [token]);
   useEffect(load, [load]);
 
   const save = async () => {
@@ -645,6 +654,8 @@ function simpleMarkdown(md: string): string {
 /* ─── Guestbook Panel ─── */
 function GuestbookPanel({ token, t, toast }: PanelProps) {
   const [entries, setEntries] = useState<GuestbookEntry[]>([]);
+  const [editing, setEditing] = useState<GuestbookEntry | null>(null);
+  const [saving, setSaving] = useState(false);
 
   const load = useCallback(() => {
     api.guestbook.list({ cache: "no-store" }).then(r => setEntries(r.data ?? []));
@@ -658,8 +669,61 @@ function GuestbookPanel({ token, t, toast }: PanelProps) {
     else toast(t("admin.deleteFailed"), "error");
   };
 
+  const save = async () => {
+    if (!editing || saving) return;
+    setSaving(true);
+    try {
+      const res = await api.admin.guestbook.update(token, editing.id, {
+        message: editing.message,
+        nickname: editing.user.id === 0 ? editing.user.username : undefined,
+      });
+      if (res.code === 0) {
+        toast(t("admin.saved"));
+        setEditing(null);
+        load();
+      } else {
+        toast(t("admin.saveFailed"), "error");
+      }
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
     <div className="space-y-2">
+      {editing && (
+        <div className="mb-4 rounded-2xl border border-border/50 bg-card p-6">
+          <div className="grid gap-4">
+            {editing.user.id === 0 && (
+              <div>
+                <label className="mb-1 block text-xs font-medium text-muted-foreground">Nickname</label>
+                <input
+                  value={editing.user.username}
+                  onChange={(e) => setEditing({ ...editing, user: { ...editing.user, username: e.target.value } })}
+                  className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:border-accent focus:outline-none"
+                />
+              </div>
+            )}
+            <div>
+              <label className="mb-1 block text-xs font-medium text-muted-foreground">Message</label>
+              <textarea
+                value={editing.message}
+                onChange={(e) => setEditing({ ...editing, message: e.target.value })}
+                rows={4}
+                className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:border-accent focus:outline-none"
+              />
+            </div>
+            <div className="flex gap-3">
+              <button onClick={save} disabled={saving} className="rounded-lg bg-accent px-5 py-2 text-sm font-medium text-accent-foreground disabled:opacity-50">
+                {saving ? t("admin.saving") : t("admin.save")}
+              </button>
+              <button onClick={() => setEditing(null)} className="rounded-lg border px-5 py-2 text-sm text-muted-foreground transition-colors hover:bg-muted">
+                {t("admin.cancel")}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {entries.map(e => (
         <div key={e.id} className="flex items-start justify-between rounded-xl border border-border/50 bg-card p-4">
           <div className="flex items-start gap-3">
@@ -670,8 +734,11 @@ function GuestbookPanel({ token, t, toast }: PanelProps) {
               <p className="mt-1 text-xs text-muted-foreground">{new Date(e.created_at).toLocaleDateString()}</p>
             </div>
           </div>
-          <button onClick={() => del(e.id)}
-            className="rounded-lg border border-red-300/30 px-3 py-1 text-xs text-red-500 hover:bg-red-50/10">{t("admin.delete")}</button>
+          <div className="flex gap-2">
+            <button onClick={() => setEditing({ ...e })} className="rounded-lg border px-3 py-1 text-xs hover:bg-muted">{t("admin.edit")}</button>
+            <button onClick={() => del(e.id)}
+              className="rounded-lg border border-red-300/30 px-3 py-1 text-xs text-red-500 hover:bg-red-50/10">{t("admin.delete")}</button>
+          </div>
         </div>
       ))}
       {entries.length === 0 && <p className="py-8 text-center text-muted-foreground">{t("admin.noData")}</p>}

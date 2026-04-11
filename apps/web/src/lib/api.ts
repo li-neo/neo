@@ -187,6 +187,8 @@ export const api = {
       delete: (token: string, slug: string) => authDelete<void>(`/posts/${slug}`, token),
     },
     guestbook: {
+      update: (token: string, id: number, data: { message: string; nickname?: string }) =>
+        authPut<GuestbookEntry>(`/guestbook/${id}`, token, data),
       delete: (token: string, id: number) => authDelete<void>(`/guestbook/${id}`, token),
     },
     chat: {

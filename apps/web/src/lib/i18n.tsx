@@ -144,6 +144,7 @@ const dict = {
     fSummary: { en: "Summary", zh: "摘要" },
     fContent: { en: "Content (Markdown)", zh: "正文 (Markdown)" },
     fTags: { en: "Tags (comma-separated)", zh: "标签（逗号分隔）" },
+    fReadingTime: { en: "Reading Time", zh: "阅读时长" },
     fPublished: { en: "Published", zh: "已发布" },
     blog: { en: "Blog", zh: "博客管理" },
     uploadDoc: { en: "Upload PDF / Markdown", zh: "上传 PDF / Markdown" },

@@ -8,6 +8,11 @@ class GuestbookCreate(BaseModel):
     nickname: str | None = None
 
 
+class GuestbookUpdate(BaseModel):
+    message: str
+    nickname: str | None = None
+
+
 class GuestbookOut(BaseModel):
     id: int
     user_id: int | None = None

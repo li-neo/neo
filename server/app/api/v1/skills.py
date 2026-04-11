@@ -2,11 +2,11 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.core.security import get_admin_user
+from app.core.security import get_admin_user, get_optional_user
 from app.core.response import success, paginated, error
 from app.api.deps import pagination
 from app.models.skill import Skill
-from app.models.user import User
+from app.models.user import User, UserRole
 from app.schemas.skill import SkillCreate, SkillUpdate, SkillPublishRequest
 from app.schemas.common import PaginationParams
 
@@ -17,10 +17,14 @@ router = APIRouter()
 def list_skills(
     category: str | None = None,
     platform: str | None = None,
+    include_all: bool = False,
     pg: PaginationParams = Depends(pagination),
+    current_user: User | None = Depends(get_optional_user),
     db: Session = Depends(get_db),
 ):
-    query = db.query(Skill).filter(Skill.status == "published")
+    query = db.query(Skill)
+    if not (include_all and current_user and current_user.role == UserRole.admin):
+        query = query.filter(Skill.status == "published")
     if category:
         query = query.filter(Skill.category == category)
     if platform:

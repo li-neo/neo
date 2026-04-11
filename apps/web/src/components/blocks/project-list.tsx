@@ -295,19 +295,33 @@ export function ProjectList({
   const [editing, setEditing] = useState<Record<string, unknown> | null>(null);
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
-  const items = useMemo(() => projects, [projects]);
+  const [items, setItems] = useState<Project[]>(projects);
+  const visibleProjects = useMemo(() => items, [items]);
+
+  useEffect(() => {
+    setItems(projects);
+  }, [projects]);
 
   useEffect(() => {
     const localToken = localStorage.getItem(TOKEN_KEY);
     if (!localToken) return;
     setToken(localToken);
     api.auth.me(localToken).then((res) => {
-      setIsAdmin(Boolean(res.data && res.data.role === "admin"));
+      const admin = Boolean(res.data && res.data.role === "admin");
+      setIsAdmin(admin);
+      if (!admin) return;
+      const categoryParam = activeCategory ? `category=${activeCategory}&` : "";
+      return api.projects.list(`${categoryParam}include_all=true&page_size=100`, {
+        cache: "no-store",
+        headers: { Authorization: `Bearer ${localToken}` },
+      }).then((allRes) => {
+        if (allRes.data) setItems(allRes.data);
+      });
     }).catch(() => {
       setToken(null);
       setIsAdmin(false);
     });
-  }, []);
+  }, [activeCategory]);
 
   useEffect(() => {
     if (!toast) return;
@@ -414,7 +428,7 @@ export function ProjectList({
       </div>
 
       <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-        {items.map((project, i) => (
+        {visibleProjects.map((project, i) => (
           <motion.div
             key={project.slug}
             initial={{ opacity: 0, y: 20 }}
@@ -452,6 +466,15 @@ export function ProjectList({
                 <span className="rounded-md bg-accent/10 px-2 py-0.5 text-xs font-medium text-accent">
                   {project.category.toUpperCase()}
                 </span>
+                {project.status !== "published" && (
+                  <span className={`rounded-md px-2 py-0.5 text-xs font-medium ${
+                    project.status === "draft"
+                      ? "bg-amber-500/10 text-amber-500"
+                      : "bg-stone-500/10 text-stone-400"
+                  }`}>
+                    {project.status}
+                  </span>
+                )}
                 {project.featured && (
                   <span className="rounded-md bg-amber-500/10 px-2 py-0.5 text-xs font-medium text-amber-500">
                     {t("projects.featured")}
@@ -511,7 +534,7 @@ export function ProjectList({
         ))}
       </div>
 
-      {projects.length === 0 && (
+      {visibleProjects.length === 0 && (
         <div className="rounded-2xl border border-dashed border-border/50 p-16 text-center text-muted-foreground">
           {t("projects.noProjects")}
         </div>
