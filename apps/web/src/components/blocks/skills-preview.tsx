@@ -2,16 +2,11 @@
 
 import { motion } from "framer-motion";
 import type { Skill } from "@/lib/api";
-
-const CATEGORY_ICONS: Record<string, string> = {
-  development: "Code",
-  documentation: "FileText",
-  devops: "Rocket",
-  ml: "Brain",
-  data: "Database",
-};
+import { useI18n } from "@/lib/i18n";
 
 export function SkillsPreview({ skills }: { skills: Skill[] }) {
+  const { t } = useI18n();
+
   return (
     <section className="border-t border-border/40 py-32">
       <div className="mx-auto max-w-6xl px-6">
@@ -23,10 +18,10 @@ export function SkillsPreview({ skills }: { skills: Skill[] }) {
           className="mb-16 text-center"
         >
           <h2 className="mb-4 text-3xl font-bold tracking-tight sm:text-4xl">
-            Skills & Tools
+            {t("skills.title")}
           </h2>
           <p className="text-muted-foreground">
-            OpenClaw skills, MCP services, and developer tools
+            {t("skills.subtitle")}
           </p>
         </motion.div>
 
@@ -34,7 +29,7 @@ export function SkillsPreview({ skills }: { skills: Skill[] }) {
           {skills.map((skill, i) => (
             <motion.a
               key={skill.slug}
-              href={`/skills`}
+              href="/skills"
               initial={{ opacity: 0, y: 20 }}
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
@@ -60,7 +55,7 @@ export function SkillsPreview({ skills }: { skills: Skill[] }) {
                   <span className="inline-block h-1.5 w-1.5 rounded-full bg-green-500" />
                   {skill.platform}
                 </span>
-                <span>{skill.install_count.toLocaleString()} installs</span>
+                <span>{skill.install_count.toLocaleString()} {t("skills.installs")}</span>
               </div>
             </motion.a>
           ))}
@@ -71,7 +66,7 @@ export function SkillsPreview({ skills }: { skills: Skill[] }) {
             href="/skills"
             className="text-sm text-muted-foreground hover:text-foreground transition-colors"
           >
-            Browse all skills &rarr;
+            {t("skills.browseAll")} &rarr;
           </a>
         </div>
       </div>

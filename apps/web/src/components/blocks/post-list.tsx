@@ -2,8 +2,11 @@
 
 import { motion } from "framer-motion";
 import type { Post } from "@/lib/api";
+import { useI18n, dateLocale } from "@/lib/i18n";
 
 export function PostList({ posts }: { posts: Post[] }) {
+  const { t, locale } = useI18n();
+
   return (
     <div className="space-y-8">
       {posts.map((post, i) => (
@@ -30,16 +33,16 @@ export function PostList({ posts }: { posts: Post[] }) {
             <div className="flex-1">
               <div className="mb-2 flex items-center gap-3 text-xs text-muted-foreground">
                 <time>
-                  {new Date(post.created_at).toLocaleDateString("en-US", {
+                  {new Date(post.created_at).toLocaleDateString(dateLocale(locale), {
                     year: "numeric",
                     month: "short",
                     day: "numeric",
                   })}
                 </time>
                 <span>&middot;</span>
-                <span>{post.reading_time} min read</span>
+                <span>{post.reading_time} {t("blog.minRead")}</span>
                 <span>&middot;</span>
-                <span>{post.views} views</span>
+                <span>{post.views} {t("blog.views")}</span>
               </div>
               <h2 className="mb-2 text-xl font-semibold group-hover:text-accent transition-colors">
                 {post.title}
@@ -66,7 +69,7 @@ export function PostList({ posts }: { posts: Post[] }) {
 
       {posts.length === 0 && (
         <div className="rounded-2xl border border-dashed border-border/50 p-16 text-center text-muted-foreground">
-          No posts published yet
+          {t("blog.noPosts")}
         </div>
       )}
     </div>

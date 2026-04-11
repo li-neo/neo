@@ -11,6 +11,7 @@ class SkillCreate(BaseModel):
     version: str = "0.1.0"
     source_url: str | None = None
     install_command: str | None = None
+    status: str = "published"
     platform: str = "openclaw"
     metadata_: dict[str, Any] | None = None
 

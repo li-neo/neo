@@ -2,6 +2,7 @@
 
 import { motion } from "framer-motion";
 import type { Project } from "@/lib/api";
+import { useI18n } from "@/lib/i18n";
 
 const CATEGORY_STYLES: Record<string, { label: string; color: string }> = {
   llm: { label: "LLM", color: "from-blue-500 to-cyan-500" },
@@ -12,6 +13,8 @@ const CATEGORY_STYLES: Record<string, { label: string; color: string }> = {
 };
 
 export function ProjectsPreview({ projects }: { projects: Project[] }) {
+  const { t } = useI18n();
+
   return (
     <section className="py-32">
       <div className="mx-auto max-w-6xl px-6">
@@ -23,10 +26,10 @@ export function ProjectsPreview({ projects }: { projects: Project[] }) {
           className="mb-16 text-center"
         >
           <h2 className="mb-4 text-3xl font-bold tracking-tight sm:text-4xl">
-            Projects
+            {t("projects.title")}
           </h2>
           <p className="text-muted-foreground">
-            Research & engineering across the AI landscape
+            {t("projects.subtitle")}
           </p>
         </motion.div>
 
@@ -96,7 +99,7 @@ export function ProjectsPreview({ projects }: { projects: Project[] }) {
             href="/projects"
             className="text-sm text-muted-foreground hover:text-foreground transition-colors"
           >
-            View all projects &rarr;
+            {t("projects.viewAll")} &rarr;
           </a>
         </div>
       </div>

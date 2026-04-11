@@ -2,8 +2,11 @@
 
 import { motion } from "framer-motion";
 import type { Skill } from "@/lib/api";
+import { useI18n } from "@/lib/i18n";
 
 export function SkillList({ skills }: { skills: Skill[] }) {
+  const { t } = useI18n();
+
   return (
     <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
       {skills.map((skill, i) => (
@@ -41,7 +44,7 @@ export function SkillList({ skills }: { skills: Skill[] }) {
               <span className="inline-block h-1.5 w-1.5 rounded-full bg-green-500" />
               <span>{skill.platform}</span>
             </div>
-            <span>{skill.install_count.toLocaleString()} installs</span>
+            <span>{skill.install_count.toLocaleString()} {t("skills.installs")}</span>
           </div>
 
           {skill.source_url && (
@@ -51,7 +54,7 @@ export function SkillList({ skills }: { skills: Skill[] }) {
               rel="noopener noreferrer"
               className="mt-4 inline-block text-xs text-muted-foreground hover:text-foreground transition-colors"
             >
-              View source &nearr;
+              {t("skills.viewSource")} &nearr;
             </a>
           )}
         </motion.div>
@@ -59,7 +62,7 @@ export function SkillList({ skills }: { skills: Skill[] }) {
 
       {skills.length === 0 && (
         <div className="col-span-full rounded-2xl border border-dashed border-border/50 p-16 text-center text-muted-foreground">
-          No skills available yet
+          {t("skills.noSkills")}
         </div>
       )}
     </div>

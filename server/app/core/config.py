@@ -41,13 +41,29 @@ class Settings(BaseSettings):
     # OpenClaw
     openclaw_api_url: str = ""
     openclaw_api_key: str = ""
+    openclaw_model: str = "openclaw/default"
+
+    # Chat system prompt — injected as the first message for every conversation
+    chat_system_prompt: str = ""
+
+    # Admin: GitHub username(s) or email(s) that get admin role (comma-separated)
+    admin_github_users: str = ""
+
+    # Uploads
+    upload_dir: str = "uploads"
+    max_upload_mb: int = 50
 
     # MCP
     mcp_enabled: bool = False
     mcp_endpoint: str = ""
 
+    # Database override: set DATABASE_URL to use SQLite or any other DB
+    database_url_override: str = ""
+
     @property
     def database_url(self) -> str:
+        if self.database_url_override:
+            return self.database_url_override
         return (
             f"mysql+pymysql://{self.mysql_user}:{self.mysql_password}"
             f"@{self.mysql_host}:{self.mysql_port}/{self.mysql_database}"

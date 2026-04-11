@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from app.api.v1 import auth, projects, posts, skills, guestbook, workspace, integrations, mcp
+from app.api.v1 import auth, projects, posts, skills, guestbook, workspace, integrations, mcp, uploads, chat, github_import
 
 api_router = APIRouter()
 
@@ -11,3 +11,6 @@ api_router.include_router(guestbook.router, prefix="/guestbook", tags=["Guestboo
 api_router.include_router(workspace.router, prefix="/workspace", tags=["Workspace"])
 api_router.include_router(integrations.router, prefix="/integrations", tags=["Integrations"])
 api_router.include_router(mcp.router, prefix="/mcp", tags=["MCP"])
+api_router.include_router(uploads.router, prefix="/uploads", tags=["Uploads"])
+api_router.include_router(chat.router, prefix="/chat", tags=["Chat"])
+api_router.include_router(github_import.router, prefix="/github", tags=["GitHub Import"])

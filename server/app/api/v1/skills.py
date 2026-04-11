@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.core.security import get_current_user
+from app.core.security import get_admin_user
 from app.core.response import success, paginated, error
 from app.api.deps import pagination
 from app.models.skill import Skill
@@ -39,7 +39,7 @@ def get_skill(slug: str, db: Session = Depends(get_db)):
 
 
 @router.post("")
-def create_skill(body: SkillCreate, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def create_skill(body: SkillCreate, user: User = Depends(get_admin_user), db: Session = Depends(get_db)):
     skill = Skill(**body.model_dump(), author_id=user.id)
     db.add(skill)
     db.commit()
@@ -48,7 +48,7 @@ def create_skill(body: SkillCreate, user: User = Depends(get_current_user), db: 
 
 
 @router.put("/{slug}")
-def update_skill(slug: str, body: SkillUpdate, _: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def update_skill(slug: str, body: SkillUpdate, _: User = Depends(get_admin_user), db: Session = Depends(get_db)):
     skill = db.query(Skill).filter(Skill.slug == slug).first()
     if not skill:
         return error(code=404, message="Skill not found")
@@ -60,7 +60,7 @@ def update_skill(slug: str, body: SkillUpdate, _: User = Depends(get_current_use
 
 
 @router.delete("/{slug}")
-def delete_skill(slug: str, _: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def delete_skill(slug: str, _: User = Depends(get_admin_user), db: Session = Depends(get_db)):
     skill = db.query(Skill).filter(Skill.slug == slug).first()
     if not skill:
         return error(code=404, message="Skill not found")
@@ -70,7 +70,7 @@ def delete_skill(slug: str, _: User = Depends(get_current_user), db: Session = D
 
 
 @router.post("/publish")
-def publish_skill(body: SkillPublishRequest, _: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def publish_skill(body: SkillPublishRequest, _: User = Depends(get_admin_user), db: Session = Depends(get_db)):
     """Publish a skill to external platform (OpenClaw, etc.)."""
     skill = db.query(Skill).filter(Skill.id == body.skill_id).first()
     if not skill:

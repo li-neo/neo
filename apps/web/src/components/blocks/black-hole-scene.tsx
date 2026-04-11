@@ -504,11 +504,15 @@ function CelestialBodiesWrapper(props: Omit<Parameters<typeof CelestialBodies>[0
 function OrbSphere() {
   const ref = useRef<THREE.Mesh>(null);
   const glowRef = useRef<THREE.Mesh>(null);
+
+  const fadeUni = useMemo(() => ({ value: 1.0 }), []);
+
   const mat = useMemo(() => new THREE.ShaderMaterial({
     uniforms: {
       uLightPos: { value: new THREE.Vector3(...C.LIGHT_POS) },
       uLightPos2: { value: new THREE.Vector3(-3, -1, 5) },
       uTime: { value: 0 },
+      uFade: fadeUni,
     },
     vertexShader: /* glsl */ `
       varying vec3 vNormal,vViewDir,vWorldPos;
@@ -520,9 +524,10 @@ function OrbSphere() {
         gl_Position=projectionMatrix*mv;
       }`,
     fragmentShader: /* glsl */ `
-      uniform vec3 uLightPos,uLightPos2;uniform float uTime;
+      uniform vec3 uLightPos,uLightPos2;uniform float uTime,uFade;
       varying vec3 vNormal,vViewDir,vWorldPos;
       void main(){
+        if(uFade<0.01) discard;
         vec3 N=normalize(vNormal),V=normalize(vViewDir);
         vec3 L1=normalize(uLightPos-vWorldPos),L2=normalize(uLightPos2-vWorldPos);
         float diff=max(dot(N,L1),0.0);float diff2=max(dot(N,L2),0.0);
@@ -531,30 +536,34 @@ function OrbSphere() {
         float fresnel=pow(1.0-max(dot(N,V),0.0),2.8);
         vec3 color=vec3(0.4,0.22,0.18)+diffuse+spec*vec3(1,0.9,0.8)+vec3(1.0,0.88,0.75)*fresnel*0.7;
         color+=vec3(0.9,0.5,0.35)*max(dot(-N,L1),0.0)*0.15;
-        gl_FragColor=vec4(color,mix(0.08,0.38,fresnel));
+        gl_FragColor=vec4(color,mix(0.08,0.38,fresnel)*uFade);
       }`,
     transparent: true, depthWrite: false, side: THREE.FrontSide,
-  }), []);
+  }), [fadeUni]);
+
+  const glowMat = useMemo(() => new THREE.ShaderMaterial({
+    transparent: true, depthWrite: false, side: THREE.BackSide,
+    uniforms: { uFade: fadeUni },
+    vertexShader: `varying vec3 vN,vV;void main(){vN=normalize(normalMatrix*normal);vec4 mv=modelViewMatrix*vec4(position,1);vV=normalize(-mv.xyz);gl_Position=projectionMatrix*mv;}`,
+    fragmentShader: `uniform float uFade;varying vec3 vN,vV;void main(){if(uFade<0.01)discard;float f=pow(1.0-abs(dot(normalize(vN),normalize(vV))),2.0);gl_FragColor=vec4(1.0,0.85,0.7,f*0.2*uFade);}`,
+  }), [fadeUni]);
 
   useFrame((s) => {
     const t = s.clock.elapsedTime;
     const pulse = 1.0 + Math.sin(t * C.ORB_PULSE_FREQ) * C.ORB_PULSE_AMP;
     const sp = scrollRef.value;
     const vis = Math.max(0, 1 - sp * C.ORB_FADE_SPEED);
-    if (ref.current) { mat.uniforms.uTime.value = t; ref.current.scale.setScalar(pulse); ref.current.rotation.y = t * C.ORB_ROTATION_SPEED; ref.current.visible = vis > 0.01; mat.opacity = vis; }
-    if (glowRef.current) { glowRef.current.scale.setScalar(pulse * 1.06); glowRef.current.visible = vis > 0.01; }
+    fadeUni.value = vis;
+    mat.uniforms.uTime.value = t;
+    const sc = pulse * (0.3 + vis * 0.7);
+    if (ref.current) { ref.current.scale.setScalar(sc); ref.current.rotation.y = t * C.ORB_ROTATION_SPEED; ref.current.visible = vis > 0.01; }
+    if (glowRef.current) { glowRef.current.scale.setScalar(sc * 1.06); glowRef.current.visible = vis > 0.01; }
   });
 
   return (
     <group>
       <mesh ref={ref} material={mat}><sphereGeometry args={[C.RADIUS, 64, 64]} /></mesh>
-      <mesh ref={glowRef}>
-        <sphereGeometry args={[C.RADIUS, 32, 32]} />
-        <shaderMaterial transparent depthWrite={false} side={THREE.BackSide}
-          vertexShader={`varying vec3 vN,vV;void main(){vN=normalize(normalMatrix*normal);vec4 mv=modelViewMatrix*vec4(position,1);vV=normalize(-mv.xyz);gl_Position=projectionMatrix*mv;}`}
-          fragmentShader={`varying vec3 vN,vV;void main(){float f=pow(1.0-abs(dot(normalize(vN),normalize(vV))),2.0);gl_FragColor=vec4(1.0,0.85,0.7,f*0.2);}`}
-        />
-      </mesh>
+      <mesh ref={glowRef} material={glowMat}><sphereGeometry args={[C.RADIUS, 32, 32]} /></mesh>
     </group>
   );
 }
@@ -576,12 +585,14 @@ function Background() {
       float rand(vec2 co){return fract(sin(dot(co,vec2(12.9898,78.233)))*43758.5453);}
       void main(){
         vec2 uv=vUv;
-        vec3 color=mix(mix(uBL,uBR,uv.x),mix(uTL,uTR,uv.x),uv.y);
-        float dark=mix(1.0,uDarkMin,uScroll*uScroll);
-        color*=dark;
+        vec3 warmBg=mix(mix(uBL,uBR,uv.x),mix(uTL,uTR,uv.x),uv.y);
         float vig=1.0-smoothstep(0.4,1.4,length((uv-0.5)*vec2(1.6,1.2)));
-        color*=mix(0.7,1.0,vig);
-        color+=rand(uv*800.0+fract(uTime*0.5))*0.04*dark-0.02*dark;
+        warmBg*=mix(0.7,1.0,vig);
+        float sp=uScroll;
+        float darkT=smoothstep(0.0,0.5,sp);
+        vec3 color=warmBg*(1.0-darkT)+vec3(uDarkMin)*darkT;
+        float noiseAmt=mix(0.04,0.015,darkT);
+        color+=rand(uv*800.0+fract(uTime*0.5))*noiseAmt-noiseAmt*0.5;
 
         // distant stars appear as background darkens during zoom
         float starVis=smoothstep(0.15,0.5,uScroll);

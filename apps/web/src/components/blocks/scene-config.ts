@@ -104,7 +104,7 @@ export const SCENE = {
   ZOOM_DENSITY_CULL: 0.95,
 
   /** 3D 天体放大倍数上限（保持小尺度，避免失真） */
-  BODY_ZOOM_GROW_MAX: 1.3,
+  BODY_ZOOM_GROW_MAX: 1.05,
 
   /** 3D 天体密度剔除系数（越大 → 越稀疏），滚动到底时隐藏此比例的天体 */
   BODY_DENSITY_CULL: 0.97,
@@ -175,7 +175,7 @@ export const SCENE = {
   },
 
   /** 滚动到底时背景变暗倍率 (0 = 全黑，1 = 不变暗) */
-  BG_DARK_MIN: 0.08,
+  BG_DARK_MIN: 0.0,
 
   // ═══════════════════════════════════════════════════════════
   // 玻璃球壳（OrbSphere）
@@ -209,18 +209,18 @@ export const SCENE = {
 
   BODY_TYPES: {
     /** 恒星：发光球体（蓝白/黄/红巨星 3 种子类） */
-    STAR: { ratio: 0.05, scale: [0.008, 0.025] as [number, number] },
+    STAR: { ratio: 0.05, scale: [0.005, 0.015] as [number, number] },
     /** 黑洞：黑色球体 + 旋转吸积盘光环 */
-    BLACK_HOLE: { ratio: 0.05, scale: [0.012, 0.03] as [number, number] },
+    BLACK_HOLE: { ratio: 0.05, scale: [0.008, 0.018] as [number, number] },
     /** 行星：地球(蓝绿)/火星(红褐)/冰行星(浅蓝)/气态巨星(棕黄) */
-    PLANET: { ratio: 0.35, scale: [0.008, 0.022] as [number, number] },
+    PLANET: { ratio: 0.35, scale: [0.005, 0.014] as [number, number] },
     /** 环形行星：类似土星，球体 + 倾斜的半透明环 */
-    RING_PLANET: { ratio: 0.10, scale: [0.012, 0.028] as [number, number] },
+    RING_PLANET: { ratio: 0.10, scale: [0.008, 0.018] as [number, number] },
     /** 陨石/小行星：不规则多面体，灰褐色粗糙材质 */
-    ASTEROID: { ratio: 0.25, scale: [0.005, 0.015] as [number, number] },
+    ASTEROID: { ratio: 0.25, scale: [0.003, 0.010] as [number, number] },
     /** 人造卫星：盒子+太阳能板 */
-    SATELLITE: { ratio: 0.05, scale: [0.006, 0.014] as [number, number] },
+    SATELLITE: { ratio: 0.05, scale: [0.004, 0.010] as [number, number] },
     /** 彗星：球 + 速度方向的发光拖尾 */
-    COMET: { ratio: 0.15, scale: [0.006, 0.016] as [number, number] },
+    COMET: { ratio: 0.15, scale: [0.004, 0.010] as [number, number] },
   },
 };

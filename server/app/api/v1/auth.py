@@ -25,16 +25,23 @@ def github_login():
 
 
 @router.get("/github/callback")
-async def github_callback(code: str = Query(...), db: Session = Depends(get_db)):
+async def github_callback(
+    code: str = Query(...),
+    redirect_uri: str = Query(""),
+    db: Session = Depends(get_db),
+):
     """Handle GitHub OAuth callback, create/update user, return JWT."""
     async with httpx.AsyncClient() as client:
+        payload: dict = {
+            "client_id": settings.github_client_id,
+            "client_secret": settings.github_client_secret,
+            "code": code,
+        }
+        if redirect_uri:
+            payload["redirect_uri"] = redirect_uri
         token_resp = await client.post(
             "https://github.com/login/oauth/access_token",
-            json={
-                "client_id": settings.github_client_id,
-                "client_secret": settings.github_client_secret,
-                "code": code,
-            },
+            json=payload,
             headers={"Accept": "application/json"},
         )
         token_data = token_resp.json()
@@ -48,16 +55,37 @@ async def github_callback(code: str = Query(...), db: Session = Depends(get_db))
         )
         gh_user = user_resp.json()
 
+        # Public email may be null; fetch from /user/emails for private primary email
+        gh_email = gh_user.get("email") or ""
+        if not gh_email:
+            emails_resp = await client.get(
+                "https://api.github.com/user/emails",
+                headers={"Authorization": f"Bearer {access_token}"},
+            )
+            if emails_resp.status_code == 200:
+                for em in emails_resp.json():
+                    if em.get("primary"):
+                        gh_email = em["email"]
+                        break
+    gh_login = gh_user["login"]
+
+    admin_list = [u.strip().lower() for u in settings.admin_github_users.split(",") if u.strip()]
+    is_admin = (
+        gh_login.lower() in admin_list
+        or (gh_email and gh_email.lower() in admin_list)
+    )
+
     user = db.query(User).filter(User.github_id == gh_user["id"]).first()
     if user is None:
+        role = UserRole.admin if is_admin else UserRole.user
         user = User(
             github_id=gh_user["id"],
-            username=gh_user["login"],
+            username=gh_login,
             display_name=gh_user.get("name"),
             avatar_url=gh_user.get("avatar_url"),
-            email=gh_user.get("email"),
+            email=gh_email,
             bio=gh_user.get("bio"),
-            role=UserRole.user,
+            role=role,
         )
         db.add(user)
         db.commit()
@@ -65,6 +93,10 @@ async def github_callback(code: str = Query(...), db: Session = Depends(get_db))
     else:
         user.avatar_url = gh_user.get("avatar_url")
         user.display_name = gh_user.get("name")
+        if is_admin and user.role != UserRole.admin:
+            user.role = UserRole.admin
+        elif not is_admin and user.role == UserRole.admin:
+            user.role = UserRole.user
         db.commit()
 
     jwt_token = create_access_token(data={"sub": str(user.id)})

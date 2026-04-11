@@ -1,6 +1,11 @@
-.PHONY: dev dev-server dev-web build up down restart logs db-migrate db-upgrade seed clean
+.PHONY: dev dev-local dev-server dev-web build up down restart logs db-migrate db-upgrade seed clean
 
-# ---------- Development ----------
+# ---------- Local dev (SQLite, no Docker) ----------
+dev-local:
+	@echo "Starting local dev (SQLite)..."
+	$(MAKE) dev-server & $(MAKE) dev-web
+
+# ---------- Development (Docker MySQL) ----------
 dev:
 	@echo "Starting dev environment..."
 	docker compose up -d mysql

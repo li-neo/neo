@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { Navbar } from "@/components/layout/navbar";
 import { Footer } from "@/components/layout/footer";
 import { GuestbookList } from "@/components/blocks/guestbook-list";
+import { GuestbookForm } from "@/components/blocks/guestbook-form";
+import { PageHeader } from "@/components/blocks/page-header";
 import { api } from "@/lib/api";
 
 export const metadata: Metadata = {
@@ -18,10 +20,8 @@ export default async function GuestbookPage() {
     <>
       <Navbar />
       <main className="mx-auto max-w-6xl px-6 pt-24 pb-16">
-        <h1 className="mb-4 text-4xl font-bold tracking-tight">Guestbook</h1>
-        <p className="mb-12 text-muted-foreground">
-          Sign in with GitHub and leave a message
-        </p>
+        <PageHeader titleKey="guestbook.title" subtitleKey="guestbook.subtitle" />
+        <GuestbookForm />
         <GuestbookList entries={res.data ?? []} />
       </main>
       <Footer />

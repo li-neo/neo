@@ -1,4 +1,10 @@
+"use client";
+
+import { useI18n } from "@/lib/i18n";
+
 export function Footer() {
+  const { t } = useI18n();
+
   return (
     <footer className="border-t border-stone-300/30 py-16">
       <div className="mx-auto flex max-w-6xl flex-col items-center gap-6 px-6">
@@ -25,11 +31,11 @@ export function Footer() {
             href="/blog"
             className="text-stone-500 transition-colors hover:text-orange-600"
           >
-            Blog
+            {t("blog.title")}
           </a>
         </div>
         <p className="text-xs text-stone-500">
-          &copy; {new Date().getFullYear()} Neo. All rights reserved.
+          &copy; {new Date().getFullYear()} Neo. {t("footer.rights")}
         </p>
       </div>
     </footer>

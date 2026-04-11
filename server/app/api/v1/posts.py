@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.core.security import get_current_user
+from app.core.security import get_admin_user
 from app.core.response import success, paginated, error
 from app.api.deps import pagination
 from app.models.post import Post
@@ -38,7 +38,7 @@ def get_post(slug: str, db: Session = Depends(get_db)):
 
 
 @router.post("")
-def create_post(body: PostCreate, _: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def create_post(body: PostCreate, _: User = Depends(get_admin_user), db: Session = Depends(get_db)):
     post = Post(**body.model_dump())
     if post.content:
         post.reading_time = max(1, len(post.content) // 1000)
@@ -49,7 +49,7 @@ def create_post(body: PostCreate, _: User = Depends(get_current_user), db: Sessi
 
 
 @router.put("/{slug}")
-def update_post(slug: str, body: PostUpdate, _: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def update_post(slug: str, body: PostUpdate, _: User = Depends(get_admin_user), db: Session = Depends(get_db)):
     post = db.query(Post).filter(Post.slug == slug).first()
     if not post:
         return error(code=404, message="Post not found")
@@ -63,7 +63,7 @@ def update_post(slug: str, body: PostUpdate, _: User = Depends(get_current_user)
 
 
 @router.delete("/{slug}")
-def delete_post(slug: str, _: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def delete_post(slug: str, _: User = Depends(get_admin_user), db: Session = Depends(get_db)):
     post = db.query(Post).filter(Post.slug == slug).first()
     if not post:
         return error(code=404, message="Post not found")

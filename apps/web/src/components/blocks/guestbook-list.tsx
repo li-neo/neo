@@ -2,8 +2,11 @@
 
 import { motion } from "framer-motion";
 import type { GuestbookEntry } from "@/lib/api";
+import { useI18n, dateLocale } from "@/lib/i18n";
 
 export function GuestbookList({ entries }: { entries: GuestbookEntry[] }) {
+  const { t, locale } = useI18n();
+
   return (
     <div className="space-y-4">
       {entries.map((entry, i) => (
@@ -29,7 +32,7 @@ export function GuestbookList({ entries }: { entries: GuestbookEntry[] }) {
             <div className="mb-1 flex items-center gap-2">
               <span className="text-sm font-medium">{entry.user.username}</span>
               <time className="text-xs text-muted-foreground">
-                {new Date(entry.created_at).toLocaleDateString("en-US", {
+                {new Date(entry.created_at).toLocaleDateString(dateLocale(locale), {
                   year: "numeric",
                   month: "short",
                   day: "numeric",
@@ -43,7 +46,7 @@ export function GuestbookList({ entries }: { entries: GuestbookEntry[] }) {
 
       {entries.length === 0 && (
         <div className="rounded-2xl border border-dashed border-border/50 p-16 text-center text-muted-foreground">
-          No messages yet. Be the first to sign the guestbook!
+          {t("guestbook.empty")}
         </div>
       )}
     </div>

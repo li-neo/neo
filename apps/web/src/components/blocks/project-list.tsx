@@ -2,9 +2,10 @@
 
 import { motion } from "framer-motion";
 import type { Project } from "@/lib/api";
+import { useI18n } from "@/lib/i18n";
 
 const CATEGORIES = [
-  { key: "", label: "All" },
+  { key: "", labelKey: "projects.all" as const },
   { key: "llm", label: "LLM" },
   { key: "vla", label: "VLA" },
   { key: "multimodal", label: "Multimodal" },
@@ -18,9 +19,10 @@ export function ProjectList({
   projects: Project[];
   activeCategory?: string;
 }) {
+  const { t } = useI18n();
+
   return (
     <>
-      {/* Category filter */}
       <div className="mb-10 flex flex-wrap gap-2">
         {CATEGORIES.map((cat) => (
           <a
@@ -32,12 +34,11 @@ export function ProjectList({
                 : "bg-muted text-muted-foreground hover:text-foreground"
             }`}
           >
-            {cat.label}
+            {"labelKey" in cat ? t(cat.labelKey) : cat.label}
           </a>
         ))}
       </div>
 
-      {/* Project grid */}
       <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
         {projects.map((project, i) => (
           <motion.div
@@ -63,7 +64,7 @@ export function ProjectList({
                 </span>
                 {project.featured && (
                   <span className="rounded-md bg-amber-500/10 px-2 py-0.5 text-xs font-medium text-amber-500">
-                    Featured
+                    {t("projects.featured")}
                   </span>
                 )}
               </div>
@@ -122,7 +123,7 @@ export function ProjectList({
 
       {projects.length === 0 && (
         <div className="rounded-2xl border border-dashed border-border/50 p-16 text-center text-muted-foreground">
-          No projects found for this category
+          {t("projects.noProjects")}
         </div>
       )}
     </>

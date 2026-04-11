@@ -23,23 +23,23 @@ def seed():
 
     try:
         # --- Admin user ---
-        if not db.query(User).first():
+        # Real admin is created on first GitHub OAuth login.
+        # Here we create a placeholder so seed FK references work.
+        admin = db.query(User).first()
+        if not admin:
             admin = User(
-                github_id=1,
-                username="neo-admin",
+                github_id=0,
+                username="seed-placeholder",
                 display_name="Neo",
-                avatar_url="https://avatars.githubusercontent.com/u/1?v=4",
-                email="admin@neo.dev",
-                bio="Builder of AI systems",
+                avatar_url="",
+                email="",
+                bio="Placeholder — will be replaced by real GitHub login",
                 role=UserRole.admin,
             )
             db.add(admin)
             db.flush()
-            admin_id = admin.id
-            print(f"  Created admin user (id={admin_id})")
-        else:
-            admin_id = db.query(User).first().id
-            print(f"  Admin user already exists (id={admin_id})")
+            print(f"  Created placeholder user (id={admin.id})")
+        admin_id = admin.id
 
         # --- Projects ---
         if db.query(Project).count() == 0:

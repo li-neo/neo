@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Navbar } from "@/components/layout/navbar";
 import { Footer } from "@/components/layout/footer";
 import { ProjectList } from "@/components/blocks/project-list";
+import { PageHeader } from "@/components/blocks/page-header";
 import { api } from "@/lib/api";
 
 export const metadata: Metadata = {
@@ -25,10 +26,7 @@ export default async function ProjectsPage({
     <>
       <Navbar />
       <main className="mx-auto max-w-6xl px-6 pt-24 pb-16">
-        <h1 className="mb-4 text-4xl font-bold tracking-tight">Projects</h1>
-        <p className="mb-8 text-muted-foreground">
-          Research & engineering across the AI landscape
-        </p>
+        <PageHeader titleKey="projects.title" subtitleKey="projects.subtitle" />
         <ProjectList projects={res.data ?? []} activeCategory={category} />
       </main>
       <Footer />

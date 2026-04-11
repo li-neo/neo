@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.core.security import get_current_user
+from app.core.security import get_admin_user
 from app.core.response import success, paginated, error
 from app.api.deps import pagination
 from app.models.project import Project
@@ -39,7 +39,7 @@ def get_project(slug: str, db: Session = Depends(get_db)):
 
 
 @router.post("")
-def create_project(body: ProjectCreate, _: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def create_project(body: ProjectCreate, _: User = Depends(get_admin_user), db: Session = Depends(get_db)):
     project = Project(**body.model_dump())
     db.add(project)
     db.commit()
@@ -48,7 +48,7 @@ def create_project(body: ProjectCreate, _: User = Depends(get_current_user), db:
 
 
 @router.put("/{slug}")
-def update_project(slug: str, body: ProjectUpdate, _: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def update_project(slug: str, body: ProjectUpdate, _: User = Depends(get_admin_user), db: Session = Depends(get_db)):
     project = db.query(Project).filter(Project.slug == slug).first()
     if not project:
         return error(code=404, message="Project not found")
@@ -60,7 +60,7 @@ def update_project(slug: str, body: ProjectUpdate, _: User = Depends(get_current
 
 
 @router.delete("/{slug}")
-def delete_project(slug: str, _: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def delete_project(slug: str, _: User = Depends(get_admin_user), db: Session = Depends(get_db)):
     project = db.query(Project).filter(Project.slug == slug).first()
     if not project:
         return error(code=404, message="Project not found")
