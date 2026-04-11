@@ -5,6 +5,8 @@ import { motion } from "framer-motion";
 import { useRouter } from "next/navigation";
 import { api, type Post } from "@/lib/api";
 import { useI18n, dateLocale, type TKey } from "@/lib/i18n";
+import { MarkdownRenderer } from "@/components/blocks/markdown-renderer";
+import { embedPostSourceMeta, parsePostSourceMeta, sourceLabel } from "@/lib/post-content";
 
 const TOKEN_KEY = "neo-admin-token";
 const POST_CREATE_KEYS = ["slug", "title", "summary", "content", "cover_url", "tags", "reading_time", "published"] as const;
@@ -99,7 +101,37 @@ function PostEditSheet({
   const { t } = useI18n();
   const fileRef = useRef<HTMLInputElement>(null);
   const [uploadingField, setUploadingField] = useState<string | null>(null);
+  const [importUrl, setImportUrl] = useState("");
   const set = (key: string, value: unknown) => onChange({ ...data, [key]: value });
+
+  const applyImportedDraft = (draft: {
+    title: string;
+    slug: string;
+    summary: string;
+    content: string;
+    tags: string[];
+    cover_url: string | null;
+    published: boolean;
+    reading_time: number;
+    source_type?: string;
+    source_url?: string | null;
+  }) => {
+    const contentWithMeta = embedPostSourceMeta(draft.content, {
+      sourceType: draft.source_type ?? null,
+      sourceUrl: draft.source_url ?? null,
+    });
+    onChange({
+      ...data,
+      title: data.title || draft.title,
+      slug: data.slug || draft.slug,
+      summary: data.summary || draft.summary,
+      content: contentWithMeta,
+      tags: draft.tags,
+      cover_url: data.cover_url || draft.cover_url,
+      published: typeof data.published === "boolean" ? data.published : draft.published,
+      reading_time: draft.reading_time,
+    });
+  };
 
   const handleFileUpload = async (key: string, file: File) => {
     setUploadingField(key);
@@ -114,6 +146,25 @@ function PostEditSheet({
     setUploadingField(null);
   };
 
+  const importDoc = async (file: File) => {
+    setUploadingField("post-import");
+    const res = await api.admin.posts.importFile(token, file);
+    if (res.data) applyImportedDraft(res.data);
+    setUploadingField(null);
+  };
+
+  const importRemoteDoc = async () => {
+    const url = importUrl.trim();
+    if (!url) return;
+    setUploadingField("post-import");
+    const res = await api.admin.posts.importUrl(token, url);
+    if (res.data) {
+      applyImportedDraft(res.data);
+      setImportUrl("");
+    }
+    setUploadingField(null);
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex justify-end bg-stone-950/40 backdrop-blur-sm">
       <div className="h-full w-full max-w-3xl overflow-y-auto border-l border-white/10 bg-background px-6 py-6 shadow-2xl">
@@ -124,6 +175,33 @@ function PostEditSheet({
           </div>
           <button onClick={onCancel} className="rounded-full border border-border px-3 py-1 text-sm text-muted-foreground transition-colors hover:bg-muted">
             {t("admin.cancel")}
+          </button>
+        </div>
+
+        <div className="mb-6 flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              fileRef.current?.setAttribute("data-field", "__import__");
+              fileRef.current?.click();
+            }}
+            className="rounded-lg border border-accent/40 bg-accent/10 px-3 py-2 text-xs font-medium text-accent hover:bg-accent/20 disabled:opacity-50"
+            disabled={uploadingField === "post-import"}
+          >
+            {uploadingField === "post-import" ? t("admin.uploading") : t("admin.uploadDoc")}
+          </button>
+          <input
+            value={importUrl}
+            onChange={(e) => setImportUrl(e.target.value)}
+            placeholder={t("admin.importPlaceholder")}
+            className="min-w-[260px] flex-1 rounded-lg border border-border bg-background px-3 py-2 text-xs focus:border-accent focus:outline-none"
+          />
+          <button
+            type="button"
+            onClick={importRemoteDoc}
+            className="rounded-lg border border-border px-3 py-2 text-xs font-medium text-muted-foreground hover:bg-muted"
+          >
+            {t("admin.importUrl")}
           </button>
         </div>
 
@@ -202,7 +280,8 @@ function PostEditSheet({
           onChange={async (e) => {
             const file = e.target.files?.[0];
             const field = fileRef.current?.getAttribute("data-field");
-            if (file && field) await handleFileUpload(field, file);
+            if (file && field === "__import__") await importDoc(file);
+            else if (file && field) await handleFileUpload(field, file);
             e.target.value = "";
           }}
         />
@@ -215,6 +294,12 @@ function PostEditSheet({
             {t("admin.cancel")}
           </button>
         </div>
+
+        {typeof data.content === "string" && data.content.trim().length > 0 && (
+          <div className="mt-6 rounded-2xl border border-border/50 bg-card p-6">
+            <MarkdownRenderer content={data.content} />
+          </div>
+        )}
       </div>
     </div>
   );
@@ -338,7 +423,10 @@ export function PostList({ posts }: { posts: Post[] }) {
       )}
 
       <div className="space-y-8">
-      {visiblePosts.map((post, i) => (
+        {visiblePosts.map((post, i) => {
+          const source = parsePostSourceMeta(post.content);
+          const sourceText = sourceLabel(source.sourceType);
+          return (
         <motion.article
           key={post.slug}
           initial={{ opacity: 0, y: 20 }}
@@ -392,6 +480,14 @@ export function PostList({ posts }: { posts: Post[] }) {
                     </span>
                   </>
                 )}
+                {sourceText && (
+                  <>
+                    <span>&middot;</span>
+                    <span className="rounded-md bg-accent/10 px-2 py-0.5 text-accent">
+                      {sourceText}
+                    </span>
+                  </>
+                )}
                 <span>&middot;</span>
                 <span>{post.reading_time} {t("blog.minRead")}</span>
                 <span>&middot;</span>
@@ -418,7 +514,8 @@ export function PostList({ posts }: { posts: Post[] }) {
             </div>
           </a>
         </motion.article>
-      ))}
+          );
+        })}
 
       {visiblePosts.length === 0 && (
         <div className="rounded-2xl border border-dashed border-border/50 p-16 text-center text-muted-foreground">

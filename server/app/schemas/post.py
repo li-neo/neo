@@ -21,6 +21,10 @@ class PostUpdate(BaseModel):
     published: bool | None = None
 
 
+class PostImportUrl(BaseModel):
+    url: str
+
+
 class PostOut(BaseModel):
     id: int
     slug: str

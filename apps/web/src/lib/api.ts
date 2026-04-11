@@ -48,6 +48,19 @@ export interface Post {
   updated_at: string;
 }
 
+export interface ImportedPostDraft {
+  title: string;
+  slug: string;
+  summary: string;
+  content: string;
+  tags: string[];
+  cover_url: string | null;
+  published: boolean;
+  reading_time: number;
+  source_type: string;
+  source_url: string | null;
+}
+
 export interface Skill {
   id: number;
   slug: string;
@@ -185,6 +198,27 @@ export const api = {
       create: (token: string, data: Partial<Post>) => authPost<Post>("/posts", token, data),
       update: (token: string, slug: string, data: Partial<Post>) => authPut<Post>(`/posts/${slug}`, token, data),
       delete: (token: string, slug: string) => authDelete<void>(`/posts/${slug}`, token),
+      importUrl: (token: string, url: string) => authPost<ImportedPostDraft>("/posts/import/url", token, { url }),
+      importFile: async (token: string, file: File): Promise<ApiResponse<ImportedPostDraft>> => {
+        const form = new FormData();
+        form.append("file", file);
+        const url = `${API_BASE}${API_PREFIX}/posts/import/file`;
+        try {
+          const res = await fetch(url, {
+            method: "POST",
+            headers: { Authorization: `Bearer ${token}` },
+            body: form,
+          });
+          const json = await res.json();
+          if (!res.ok) {
+            const detail = json.detail;
+            return { code: res.status, message: typeof detail === "string" ? detail : `HTTP ${res.status}`, data: null };
+          }
+          return json;
+        } catch {
+          return { code: -1, message: "Service unavailable", data: null };
+        }
+      },
     },
     guestbook: {
       update: (token: string, id: number, data: { message: string; nickname?: string }) =>

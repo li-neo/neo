@@ -5,6 +5,8 @@ import { useI18n, type TKey } from "@/lib/i18n";
 import { api, type Project, type Skill, type Post, type GuestbookEntry } from "@/lib/api";
 import { Navbar } from "@/components/layout/navbar";
 import { LocaleToggle } from "@/components/layout/locale-toggle";
+import { MarkdownRenderer } from "@/components/blocks/markdown-renderer";
+import { embedPostSourceMeta, parsePostSourceMeta, sourceLabel } from "@/lib/post-content";
 
 /* ─── token helper ─── */
 const TOKEN_KEY = "neo-admin-token";
@@ -509,36 +511,13 @@ function blogFields(t: (k: TKey) => string): FieldDef[] {
   ];
 }
 
-async function readFileAsText(file: File): Promise<string> {
-  if (file.name.endsWith(".pdf")) {
-    const arrayBuf = await file.arrayBuffer();
-    const bytes = new Uint8Array(arrayBuf);
-    let text = "";
-    for (let i = 0; i < bytes.length - 1; i++) {
-      if (bytes[i] === 0x28) {
-        let j = i + 1;
-        let chunk = "";
-        while (j < bytes.length && bytes[j] !== 0x29) { chunk += String.fromCharCode(bytes[j]); j++; }
-        if (chunk.length > 2) text += chunk;
-      }
-    }
-    if (text.length < 50) {
-      const decoder = new TextDecoder("utf-8", { fatal: false });
-      const raw = decoder.decode(arrayBuf);
-      const streamMatches = raw.match(/BT[\s\S]*?ET/g);
-      if (streamMatches) text = streamMatches.map(m => m.replace(/BT|ET|Tf|Td|Tj|TJ|\[|\]|\(|\)|\/\w+\s[\d.]+/g, "").trim()).join("\n");
-    }
-    return text.length > 10 ? text : `[PDF imported: ${file.name}]\n\nPDF content extraction is limited in browser. Please paste the text content manually or upload the PDF to the Media tab and link it.`;
-  }
-  return file.text();
-}
-
 function BlogPanel({ token, t, toast }: PanelProps) {
   const [posts, setPosts] = useState<Post[]>([]);
   const [editing, setEditing] = useState<Partial<Post> | null>(null);
   const [saving, setSaving] = useState(false);
   const [preview, setPreview] = useState(false);
   const docRef = useRef<HTMLInputElement>(null);
+  const [importUrl, setImportUrl] = useState("");
 
   const load = useCallback(() => {
     api.posts.list("include_all=true&page_size=100", {
@@ -573,12 +552,58 @@ function BlogPanel({ token, t, toast }: PanelProps) {
     else toast(t("admin.deleteFailed"), "error");
   };
 
+  const applyImportedDraft = (draft: {
+    title: string;
+    slug: string;
+    summary: string;
+    content: string;
+    tags: string[];
+    cover_url: string | null;
+    published: boolean;
+    reading_time: number;
+    source_type?: string;
+    source_url?: string | null;
+  }) => {
+    // Keep importer source info inside content metadata for consistent preview/rendering.
+    // 将导入来源写入正文元数据，确保预览和正式渲染保持一致。
+    const contentWithMeta = embedPostSourceMeta(draft.content, {
+      sourceType: draft.source_type ?? null,
+      sourceUrl: draft.source_url ?? null,
+    });
+    setEditing(prev => ({
+      ...prev,
+      title: prev?.title || draft.title,
+      slug: prev?.slug || draft.slug,
+      summary: prev?.summary || draft.summary,
+      content: contentWithMeta,
+      tags: draft.tags,
+      cover_url: prev?.cover_url || draft.cover_url,
+      published: typeof prev?.published === "boolean" ? prev.published : draft.published,
+      reading_time: draft.reading_time,
+    }));
+  };
+
   const importDoc = async (file: File) => {
-    const text = await readFileAsText(file);
-    const name = file.name.replace(/\.[^.]+$/, "");
-    const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/-+/g, "-").slice(0, 60);
-    setEditing(prev => ({ ...prev, content: text, title: prev?.title || name, slug: prev?.slug || slug }));
-    toast(t("admin.uploaded"), "info");
+    const res = await api.admin.posts.importFile(token, file);
+    if (res.code === 0 && res.data) {
+      applyImportedDraft(res.data);
+      toast(t("admin.uploaded"), "info");
+    } else {
+      toast(res.message || t("admin.saveFailed"), "error");
+    }
+  };
+
+  const importRemoteDoc = async () => {
+    const url = importUrl.trim();
+    if (!url) return;
+    const res = await api.admin.posts.importUrl(token, url);
+    if (res.code === 0 && res.data) {
+      applyImportedDraft(res.data);
+      setImportUrl("");
+      toast(t("admin.uploaded"), "info");
+    } else {
+      toast(res.message || t("admin.saveFailed"), "error");
+    }
   };
 
   return (
@@ -597,6 +622,18 @@ function BlogPanel({ token, t, toast }: PanelProps) {
             </button>
             <input ref={docRef} type="file" accept=".md,.markdown,.txt,.pdf,.html" className="hidden"
               onChange={async (e) => { const f = e.target.files?.[0]; if (f) await importDoc(f); e.target.value = ""; }} />
+            <input
+              value={importUrl}
+              onChange={(e) => setImportUrl(e.target.value)}
+              placeholder={t("admin.importPlaceholder")}
+              className="min-w-[260px] flex-1 rounded-lg border border-border bg-background px-3 py-2 text-xs focus:border-accent focus:outline-none"
+            />
+            <button
+              onClick={importRemoteDoc}
+              className="rounded-lg border border-border px-3 py-2 text-xs font-medium text-muted-foreground hover:bg-muted"
+            >
+              {t("admin.importUrl")}
+            </button>
             <button onClick={() => setPreview(!preview)}
               className={`rounded-lg border px-3 py-2 text-xs font-medium ${preview ? "border-accent bg-accent/20 text-accent" : "text-muted-foreground hover:bg-muted"}`}>
               {t("admin.contentPreview")}
@@ -608,18 +645,42 @@ function BlogPanel({ token, t, toast }: PanelProps) {
             onSave={save} onCancel={() => { setEditing(null); setPreview(false); }} t={t} saving={saving} token={token} />
 
           {preview && editing.content && (
-            <div className="rounded-2xl border border-border/50 bg-card p-6 prose prose-sm dark:prose-invert max-w-none"
-              dangerouslySetInnerHTML={{ __html: simpleMarkdown(editing.content) }} />
+            <div className="rounded-2xl border border-border/50 bg-card p-6">
+              <MarkdownRenderer content={editing.content} />
+            </div>
           )}
         </div>
       )}
 
       <div className="space-y-2">
-        {posts.map(p => (
+        {posts.map(p => {
+          const source = parsePostSourceMeta(p.content);
+          const label = sourceLabel(source.sourceType);
+
+          return (
           <div key={p.slug} className="flex items-center justify-between rounded-xl border border-border/50 bg-card p-4">
-            <div>
+            <div className="min-w-0">
               <p className="font-semibold">{p.title}</p>
               <p className="text-xs text-muted-foreground">{p.slug} · {p.published ? "✓ Published" : "Draft"} · {p.reading_time} min · {p.views} views</p>
+              {(label || source.sourceUrl) && (
+                <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                  {label && (
+                    <span className="rounded-full border border-accent/20 bg-accent/5 px-2 py-0.5 text-accent">
+                      {label}
+                    </span>
+                  )}
+                  {source.sourceUrl && (
+                    <a
+                      href={source.sourceUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="truncate text-accent underline underline-offset-4"
+                    >
+                      {source.sourceUrl}
+                    </a>
+                  )}
+                </div>
+              )}
             </div>
             <div className="flex gap-2">
               <button onClick={() => { setEditing({ ...p }); setPreview(false); }} className="rounded-lg border px-3 py-1 text-xs hover:bg-muted">{t("admin.edit")}</button>
@@ -627,28 +688,11 @@ function BlogPanel({ token, t, toast }: PanelProps) {
                 className="rounded-lg border border-red-300/30 px-3 py-1 text-xs text-red-500 hover:bg-red-50/10">{t("admin.delete")}</button>
             </div>
           </div>
-        ))}
+        );})}
         {posts.length === 0 && !editing && <p className="py-8 text-center text-muted-foreground">{t("admin.noData")}</p>}
       </div>
     </div>
   );
-}
-
-function simpleMarkdown(md: string): string {
-  return md
-    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
-    .replace(/^### (.+)$/gm, "<h3>$1</h3>")
-    .replace(/^## (.+)$/gm, "<h2>$1</h2>")
-    .replace(/^# (.+)$/gm, "<h1>$1</h1>")
-    .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
-    .replace(/\*(.+?)\*/g, "<em>$1</em>")
-    .replace(/`([^`]+)`/g, "<code>$1</code>")
-    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" class="text-accent underline">$1</a>')
-    .replace(/^- (.+)$/gm, "<li>$1</li>")
-    .replace(/(<li>.*<\/li>\n?)+/g, (m) => `<ul>${m}</ul>`)
-    .replace(/\n\n/g, "</p><p>")
-    .replace(/\n/g, "<br>")
-    .replace(/^/, "<p>").replace(/$/, "</p>");
 }
 
 /* ─── Guestbook Panel ─── */
