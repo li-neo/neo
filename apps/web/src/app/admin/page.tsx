@@ -865,13 +865,18 @@ function EditForm({ fields, data, onChange, onSave, onCancel, t, saving, token }
   return (
     <div className="mb-6 rounded-2xl border border-accent/30 bg-card p-6">
       <div className="grid gap-4 sm:grid-cols-2">
-        {fields.map(f => (
+        {fields.map(f => {
+          const rawValue = data[f.key];
+          const stringValue = String(rawValue ?? "");
+          const previewUrl = typeof rawValue === "string" ? rawValue.trim() : "";
+
+          return (
           <div key={f.key} className={f.type === "textarea" || f.type === "url_with_upload" ? "sm:col-span-2" : ""}>
             <label className="mb-1 block text-xs font-medium text-muted-foreground">{f.label}</label>
 
             {f.type === "text" && (
               <input type="text"
-                value={f.key === "tech_stack" ? (Array.isArray(data[f.key]) ? (data[f.key] as string[]).join(", ") : String(data[f.key] ?? "")) : String(data[f.key] ?? "")}
+                value={f.key === "tech_stack" ? (Array.isArray(rawValue) ? (rawValue as string[]).join(", ") : stringValue) : stringValue}
                 onChange={e => set(f.key, f.key === "tech_stack" ? e.target.value.split(",").map(s => s.trim()) : e.target.value)}
                 className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:border-accent focus:outline-none" />
             )}
@@ -879,7 +884,7 @@ function EditForm({ fields, data, onChange, onSave, onCancel, t, saving, token }
             {f.type === "url_with_upload" && (
               <div className="space-y-2">
                 <div className="flex gap-2">
-                  <input type="text" value={String(data[f.key] ?? "")} onChange={e => set(f.key, e.target.value)}
+                  <input type="text" value={stringValue} onChange={e => set(f.key, e.target.value)}
                     placeholder="https://... or upload"
                     className="flex-1 rounded-lg border border-border bg-background px-3 py-2 text-sm focus:border-accent focus:outline-none" />
                   <button type="button"
@@ -889,34 +894,34 @@ function EditForm({ fields, data, onChange, onSave, onCancel, t, saving, token }
                     {uploadingField === f.key ? t("admin.uploading") : t("admin.upload")}
                   </button>
                 </div>
-                {data[f.key] && String(data[f.key]).length > 0 && (
+                {previewUrl.length > 0 && (
                   <div className="flex items-center gap-3 rounded-lg bg-muted/30 p-2">
-                    <img src={String(data[f.key])} alt="preview" className="h-16 w-24 rounded-md object-cover"
+                    <img src={previewUrl} alt="preview" className="h-16 w-24 rounded-md object-cover"
                       onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
-                    <span className="truncate text-xs text-muted-foreground">{String(data[f.key])}</span>
+                    <span className="truncate text-xs text-muted-foreground">{previewUrl}</span>
                   </div>
                 )}
               </div>
             )}
 
             {f.type === "textarea" && (
-              <textarea value={String(data[f.key] ?? "")} onChange={e => set(f.key, e.target.value)} rows={3}
+              <textarea value={stringValue} onChange={e => set(f.key, e.target.value)} rows={3}
                 className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:border-accent focus:outline-none" />
             )}
 
             {f.type === "select" && (
-              <select value={String(data[f.key] ?? "")} onChange={e => set(f.key, e.target.value)}
+              <select value={stringValue} onChange={e => set(f.key, e.target.value)}
                 className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:border-accent focus:outline-none">
                 {f.options?.map(o => <option key={o} value={o}>{o}</option>)}
               </select>
             )}
 
             {f.type === "checkbox" && (
-              <input type="checkbox" checked={Boolean(data[f.key])} onChange={e => set(f.key, e.target.checked)}
+              <input type="checkbox" checked={Boolean(rawValue)} onChange={e => set(f.key, e.target.checked)}
                 className="h-4 w-4 rounded border-border" />
             )}
           </div>
-        ))}
+        );})}
       </div>
 
       <input ref={fileRef} type="file" accept="image/*" className="hidden"
