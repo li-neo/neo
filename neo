@@ -1,0 +1,275 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# ============================================================
+#  neo — Project CLI
+# ============================================================
+
+ROOT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PID_DIR="$ROOT_DIR/.pids"
+SERVER_PID="$PID_DIR/server.pid"
+WEB_PID="$PID_DIR/web.pid"
+SERVER_LOG="$PID_DIR/server.log"
+WEB_LOG="$PID_DIR/web.log"
+
+mkdir -p "$PID_DIR"
+
+# ── helpers ──
+
+_is_running() { [ -f "$1" ] && kill -0 "$(cat "$1")" 2>/dev/null; }
+
+_start_server() {
+  if _is_running "$SERVER_PID"; then
+    echo "⚠️  后端已在运行 (PID $(cat "$SERVER_PID"))"
+    return
+  fi
+  echo "🔧 启动后端 (port 8000)..."
+  cd "$ROOT_DIR/server"
+  nohup uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000 \
+    > "$SERVER_LOG" 2>&1 &
+  echo $! > "$SERVER_PID"
+  sleep 1
+  if _is_running "$SERVER_PID"; then
+    echo "✅ 后端已启动 (PID $(cat "$SERVER_PID"))"
+  else
+    echo "❌ 后端启动失败，查看日志: neo log server"
+    rm -f "$SERVER_PID"
+  fi
+}
+
+_start_web() {
+  if _is_running "$WEB_PID"; then
+    echo "⚠️  前端已在运行 (PID $(cat "$WEB_PID"))"
+    return
+  fi
+  echo "🌐 启动前端 (port 3000)..."
+  cd "$ROOT_DIR/apps/web"
+  nohup pnpm dev > "$WEB_LOG" 2>&1 &
+  echo $! > "$WEB_PID"
+  sleep 2
+  if _is_running "$WEB_PID"; then
+    echo "✅ 前端已启动 (PID $(cat "$WEB_PID"))"
+  else
+    echo "❌ 前端启动失败，查看日志: neo log web"
+    rm -f "$WEB_PID"
+  fi
+}
+
+_kill_port() {
+  local port=$1
+  local pids; pids=$(lsof -ti:"$port" 2>/dev/null || true)
+  if [ -n "$pids" ]; then
+    echo "$pids" | xargs kill -9 2>/dev/null || true
+    return 0
+  fi
+  return 1
+}
+
+_stop_server() {
+  local stopped=false
+  if [ -f "$SERVER_PID" ]; then
+    local pid; pid=$(cat "$SERVER_PID")
+    if kill -0 "$pid" 2>/dev/null; then
+      echo "🔧 停止后端 (PID $pid)..."
+      kill "$pid" 2>/dev/null
+      sleep 1
+      kill -0 "$pid" 2>/dev/null && kill -9 "$pid" 2>/dev/null
+      stopped=true
+    fi
+    rm -f "$SERVER_PID"
+  fi
+  pkill -f "uvicorn app.main:app" 2>/dev/null && stopped=true || true
+  _kill_port 8000 && stopped=true || true
+  if $stopped; then
+    echo "✅ 后端已停止"
+  else
+    echo "⚠️  后端未在运行"
+  fi
+}
+
+_stop_web() {
+  local stopped=false
+  if [ -f "$WEB_PID" ]; then
+    local pid; pid=$(cat "$WEB_PID")
+    if kill -0 "$pid" 2>/dev/null; then
+      echo "🌐 停止前端 (PID $pid)..."
+      kill "$pid" 2>/dev/null
+      sleep 1
+      kill -0 "$pid" 2>/dev/null && kill -9 "$pid" 2>/dev/null
+      stopped=true
+    fi
+    rm -f "$WEB_PID"
+  fi
+  pkill -f "next dev" 2>/dev/null && stopped=true || true
+  _kill_port 3000 && stopped=true || true
+  if $stopped; then
+    echo "✅ 前端已停止"
+  else
+    echo "⚠️  前端未在运行"
+  fi
+}
+
+_status() {
+  echo ""
+  echo "═══════════════════════════════════"
+  echo "  Neo 服务状态"
+  echo "═══════════════════════════════════"
+  if _is_running "$SERVER_PID"; then
+    echo "  🟢 后端  Running  (PID $(cat "$SERVER_PID"))  http://localhost:8000"
+  else
+    echo "  🔴 后端  Stopped"
+  fi
+  if _is_running "$WEB_PID"; then
+    echo "  🟢 前端  Running  (PID $(cat "$WEB_PID"))  http://localhost:3000"
+  else
+    echo "  🔴 前端  Stopped"
+  fi
+  echo "═══════════════════════════════════"
+}
+
+# ── commands ──
+
+cmd_start() {
+  local target="${1:-all}"
+  case "$target" in
+    server)  _start_server ;;
+    web)     _start_web ;;
+    all)     _start_server; _start_web; echo ""; echo "🚀 Neo 全部启动完成"; _status ;;
+    *)       echo "用法: neo start [server|web]" ;;
+  esac
+}
+
+cmd_stop() {
+  local target="${1:-all}"
+  case "$target" in
+    server)  _stop_server ;;
+    web)     _stop_web ;;
+    all)     _stop_server; _stop_web; echo ""; echo "🛑 Neo 全部已停止" ;;
+    *)       echo "用法: neo stop [server|web]" ;;
+  esac
+}
+
+cmd_restart() {
+  local target="${1:-all}"
+  case "$target" in
+    server)  echo "🔄 重启后端..."; _stop_server; sleep 1; _start_server ;;
+    web)     echo "🔄 重启前端..."; _stop_web; sleep 1; _start_web ;;
+    all)     echo "🔄 重启全部..."; _stop_server; _stop_web; sleep 1; _start_server; _start_web; echo ""; echo "🔄 Neo 全部重启完成"; _status ;;
+    *)       echo "用法: neo restart [server|web]" ;;
+  esac
+}
+
+cmd_log() {
+  local target="${1:-all}"
+  case "$target" in
+    server)  [ -f "$SERVER_LOG" ] && tail -f "$SERVER_LOG" || echo "无后端日志" ;;
+    web)     [ -f "$WEB_LOG" ] && tail -f "$WEB_LOG" || echo "无前端日志" ;;
+    all)
+      echo "=== 后端日志 (最后 20 行) ==="
+      tail -20 "$SERVER_LOG" 2>/dev/null || echo "(无)"
+      echo ""
+      echo "=== 前端日志 (最后 20 行) ==="
+      tail -20 "$WEB_LOG" 2>/dev/null || echo "(无)"
+      ;;
+    *)  echo "用法: neo log [server|web]" ;;
+  esac
+}
+
+cmd_dev() {
+  local target="${1:-all}"
+  case "$target" in
+    server)  cd "$ROOT_DIR/server" && uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000 ;;
+    web)     cd "$ROOT_DIR/apps/web" && pnpm dev ;;
+    all)     cd "$ROOT_DIR" && make dev-local ;;
+    *)       echo "用法: neo dev [server|web]" ;;
+  esac
+}
+
+cmd_install() {
+  echo "📦 安装后端依赖..."
+  cd "$ROOT_DIR/server" && uv sync
+  echo "📦 安装前端依赖..."
+  cd "$ROOT_DIR/apps/web" && pnpm install
+  echo "✅ 全部依赖已安装"
+}
+
+cmd_db() {
+  local sub="${1:-help}"
+  case "$sub" in
+    migrate)   cd "$ROOT_DIR/server" && uv run alembic revision --autogenerate -m "${2:-auto}" ;;
+    upgrade)   cd "$ROOT_DIR/server" && uv run alembic upgrade head ;;
+    downgrade) cd "$ROOT_DIR/server" && uv run alembic downgrade -1 ;;
+    seed)      cd "$ROOT_DIR/server" && uv run python -m scripts.seed ;;
+    *)         echo "用法: neo db [migrate|upgrade|downgrade|seed]" ;;
+  esac
+}
+
+cmd_clean() {
+  echo "🧹 清理构建产物..."
+  find "$ROOT_DIR" -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
+  find "$ROOT_DIR" -type d -name .next -exec rm -rf {} + 2>/dev/null || true
+  rm -rf "$PID_DIR"
+  echo "✅ 清理完成"
+}
+
+cmd_help() {
+  cat <<'EOF'
+
+╔═════════════════════════════════════════════════════════╗
+║                  Neo CLI — 命令手册                     ║
+╠═════════════════════════════════════════════════════════╣
+║                                                         ║
+║  🚀 启动 / 停止 / 重启                                 ║
+║    neo start              全部启动（后端+前端）         ║
+║    neo stop               全部停止                      ║
+║    neo restart             全部重启                      ║
+║    neo start server       仅启动后端                    ║
+║    neo stop server        仅停止后端                    ║
+║    neo restart server     仅重启后端                    ║
+║    neo start web          仅启动前端                    ║
+║    neo stop web           仅停止前端                    ║
+║    neo restart web        仅重启前端                    ║
+║                                                         ║
+║  📊 状态 / 日志                                         ║
+║    neo status             查看服务运行状态              ║
+║    neo log server         查看后端实时日志              ║
+║    neo log web            查看前端实时日志              ║
+║    neo log                查看全部日志摘要              ║
+║                                                         ║
+║  🔧 开发                                                ║
+║    neo dev                前台启动（本地开发）          ║
+║    neo dev server         前台仅启动后端                ║
+║    neo dev web            前台仅启动前端                ║
+║    neo install            安装全部依赖                  ║
+║    neo clean              清理构建产物                  ║
+║                                                         ║
+║  🗄️  数据库                                              ║
+║    neo db migrate [msg]   生成迁移脚本                  ║
+║    neo db upgrade         执行迁移                      ║
+║    neo db downgrade       回退一步                      ║
+║    neo db seed            导入种子数据                  ║
+║                                                         ║
+║  neo help                 显示此帮助                    ║
+║                                                         ║
+╚═════════════════════════════════════════════════════════╝
+EOF
+}
+
+# ── dispatch ──
+
+cmd="${1:-help}"
+shift 2>/dev/null || true
+
+case "$cmd" in
+  start)    cmd_start "$@" ;;
+  stop)     cmd_stop "$@" ;;
+  restart)  cmd_restart "$@" ;;
+  status)   _status ;;
+  log|logs) cmd_log "$@" ;;
+  dev)      cmd_dev "$@" ;;
+  install)  cmd_install ;;
+  db)       cmd_db "$@" ;;
+  clean)    cmd_clean ;;
+  help|--help|-h) cmd_help ;;
+  *)        echo "未知命令: $cmd"; cmd_help; exit 1 ;;
+esac

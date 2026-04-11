@@ -28,6 +28,7 @@ class Settings(BaseSettings):
     github_client_id: str = ""
     github_client_secret: str = ""
     github_redirect_uri: str = "http://localhost:8000/api/v1/auth/github/callback"
+    github_token: str = ""
 
     # Hugging Face
     hf_token: str = ""

@@ -33,6 +33,7 @@ docker-compose.override.yml
 logs/
 
 # Database
+*.db
 *.sql.bak
 mysql_data/
 
@@ -43,4 +44,5 @@ htmlcov/
 
 # Misc
 *.pid
+.pids/
 .cache/

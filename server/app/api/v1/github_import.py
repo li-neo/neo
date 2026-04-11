@@ -16,8 +16,8 @@ router = APIRouter()
 
 
 def _github_headers() -> dict:
-    h = {"Accept": "application/vnd.github+json"}
-    token = get_settings().github_client_secret
+    h: dict[str, str] = {"Accept": "application/vnd.github+json"}
+    token = get_settings().github_token
     if token:
         h["Authorization"] = f"Bearer {token}"
     return h
@@ -72,14 +72,24 @@ def _opengraph_cover_url(client: httpx.Client, full_name: str) -> str | None:
     return None
 
 
+def _extract_github_username(raw: str) -> str:
+    """Accept username, profile URL, or user/repo URL and return the username."""
+    raw = raw.strip().rstrip("/")
+    if raw.startswith(("https://github.com/", "http://github.com/")):
+        parts = raw.split("github.com/", 1)[1].split("/")
+        return parts[0]
+    if "/" in raw:
+        return raw.split("/")[0]
+    return raw
+
+
 @router.get("/repos")
 def list_github_repos(
-    username: str | None = Query(None, description="GitHub username; defaults to admin username"),
+    username: str | None = Query(None, description="GitHub username or profile URL"),
     admin: User = Depends(get_admin_user),
 ):
-    effective = (username or "").strip() or None
-    if effective is None:
-        effective = admin.username
+    raw = (username or "").strip()
+    effective = _extract_github_username(raw) if raw else admin.username
 
     all_items: list[dict] = []
     with httpx.Client(timeout=30.0) as client:

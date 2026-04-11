@@ -147,7 +147,7 @@ const dict = {
     ghImportDesc: { en: "Select repos to import as projects", zh: "选择仓库导入为项目" },
     ghFetch: { en: "Fetch Repos", zh: "获取仓库列表" },
     ghFetching: { en: "Fetching...", zh: "获取中..." },
-    ghUsername: { en: "GitHub Username", zh: "GitHub 用户名" },
+    ghUsername: { en: "GitHub username or URL, e.g. octocat", zh: "GitHub 用户名或链接，如 octocat" },
     ghNoRepos: { en: "No repos found", zh: "未找到仓库" },
     ghImporting: { en: "Importing...", zh: "导入中..." },
     ghImported: { en: "Imported successfully", zh: "导入成功" },
