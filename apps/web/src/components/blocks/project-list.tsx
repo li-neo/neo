@@ -2,9 +2,13 @@
 
 import { motion } from "framer-motion";
 import type { Project } from "@/lib/api";
-import { useI18n } from "@/lib/i18n";
+import { useI18n, type TKey } from "@/lib/i18n";
 
-const CATEGORIES = [
+type ProjectCategoryOption =
+  | { key: string; labelKey: TKey }
+  | { key: string; label: string };
+
+const CATEGORIES: ProjectCategoryOption[] = [
   { key: "", labelKey: "projects.all" as const },
   { key: "llm", label: "LLM" },
   { key: "vla", label: "VLA" },
