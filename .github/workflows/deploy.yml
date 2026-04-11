@@ -1,0 +1,68 @@
+name: Deploy to Volcengine
+
+on:
+  push:
+    branches: [main]
+
+env:
+  DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+  DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install uv
+        run: pip install uv
+
+      - name: Install Python deps
+        working-directory: server
+        run: uv pip install --system -r pyproject.toml
+
+      - name: Lint Python
+        working-directory: server
+        run: uv pip install --system ruff && ruff check .
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install pnpm
+        run: corepack enable && corepack prepare pnpm@latest --activate
+
+      - name: Install JS deps
+        working-directory: apps/web
+        run: pnpm install
+
+      - name: Lint & Build frontend
+        working-directory: apps/web
+        run: pnpm build
+
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            cd /opt/neo
+            git pull origin main
+            docker compose build
+            docker compose up -d
+            docker compose exec -T server uv run alembic upgrade head
+            echo "Deployment complete at $(date)"
