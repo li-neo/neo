@@ -19,7 +19,7 @@ const FALLBACK_PROJECTS: ProjectInfo[] = [
   { title: "Multimodal AI", slug: "multimodal-ai", category: "multimodal" },
 ];
 
-export function HeroSection({ projects }: { projects?: ProjectInfo[] }) {
+export function HeroSection({ projects, children }: { projects?: ProjectInfo[]; children?: React.ReactNode }) {
   const router = useRouter();
   const projectList = projects && projects.length > 0 ? projects : FALLBACK_PROJECTS;
 
@@ -28,12 +28,15 @@ export function HeroSection({ projects }: { projects?: ProjectInfo[] }) {
   const { scrollYProgress } = useScroll({ target: containerRef, offset: ["start start", "end end"] });
   useMotionValueEvent(scrollYProgress, "change", (v) => setScrollProgress(v));
 
-  const heroOpacity = useTransform(scrollYProgress, [0, 0.3], [1, 0]);
-  const heroScale = useTransform(scrollYProgress, [0, 0.4], [1, 0.92]);
-  const heroY = useTransform(scrollYProgress, [0, 0.35], [0, -60]);
-  const immersed = scrollProgress > 0.5;
+  const heroOpacity = useTransform(scrollYProgress, [0, 0.2], [1, 0]);
+  const heroScale = useTransform(scrollYProgress, [0, 0.25], [1, 0.92]);
+  const heroY = useTransform(scrollYProgress, [0, 0.25], [0, -60]);
+  const immersed = scrollProgress > 0.35;
 
-  // hover tooltip (from 3D scene)
+  // content sections appear in the last portion of scroll
+  const contentOpacity = useTransform(scrollYProgress, [0.65, 0.8], [0, 1]);
+  const contentY = useTransform(scrollYProgress, [0.65, 0.85], [80, 0]);
+
   const [hoverInfo, setHoverInfo] = useState<{ label: string; sub: string; x: number; y: number; href: string } | null>(null);
 
   const handleStarHover = useCallback((info: { idx: number; x: number; y: number } | null) => {
@@ -47,7 +50,6 @@ export function HeroSection({ projects }: { projects?: ProjectInfo[] }) {
     }
   }, [projectList]);
 
-  // click card
   const [clickCard, setClickCard] = useState<{ label: string; sub: string; x: number; y: number } | null>(null);
   const cardTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
 
@@ -66,7 +68,7 @@ export function HeroSection({ projects }: { projects?: ProjectInfo[] }) {
   useEffect(() => () => { if (cardTimer.current) clearTimeout(cardTimer.current); }, []);
 
   return (
-    <div ref={containerRef} className="relative" style={{ height: "280vh" }}>
+    <div ref={containerRef} className="relative" style={{ height: "400vh" }}>
       <div className="sticky top-0 h-screen w-full overflow-hidden">
         <BlackHoleScene
           onStarClick={handleStarClick}
@@ -76,7 +78,7 @@ export function HeroSection({ projects }: { projects?: ProjectInfo[] }) {
 
         <div className="pointer-events-none absolute inset-0 bg-radial-fade z-[1]" />
 
-        {/* Hover tooltip: follows mouse near a star */}
+        {/* Hover tooltip */}
         <AnimatePresence>
           {hoverInfo && !clickCard && (
             <motion.div
@@ -156,6 +158,20 @@ export function HeroSection({ projects }: { projects?: ProjectInfo[] }) {
             </motion.div>
           </div>
         </motion.div>
+
+        {/* Content sections that emerge from the 3D scene */}
+        {children && (
+          <motion.div
+            className="pointer-events-auto absolute inset-x-0 bottom-0 z-20 max-h-[85vh] overflow-y-auto"
+            style={{ opacity: contentOpacity, y: contentY }}
+          >
+            <div className="rounded-t-[2.5rem] bg-[var(--color-background)] shadow-[0_-20px_60px_rgba(0,0,0,0.15)]">
+              <div className="pt-16 pb-8">
+                {children}
+              </div>
+            </div>
+          </motion.div>
+        )}
 
         <AnimatePresence mode="wait">
           {!immersed ? (

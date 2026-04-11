@@ -17,13 +17,10 @@ export default async function HomePage() {
     <>
       <Navbar />
       <main>
-        <HeroSection projects={(projectsRes.data ?? []).map(p => ({ title: p.title, slug: p.slug, category: p.category }))} />
-        <div className="relative z-10 -mt-[1px] rounded-t-[2.5rem] bg-[var(--color-background)] shadow-[0_-20px_60px_rgba(0,0,0,0.08)]">
-          <div className="pt-20">
-            <ProjectsPreview projects={projectsRes.data ?? []} />
-            <SkillsPreview skills={skillsRes.data ?? []} />
-          </div>
-        </div>
+        <HeroSection projects={(projectsRes.data ?? []).map(p => ({ title: p.title, slug: p.slug, category: p.category }))}>
+          <ProjectsPreview projects={projectsRes.data ?? []} />
+          <SkillsPreview skills={skillsRes.data ?? []} />
+        </HeroSection>
       </main>
       <Footer />
     </>

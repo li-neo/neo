@@ -210,7 +210,7 @@ void main(){
 const PT_VERT = /* glsl */ `
 uniform sampler2D tPosition, tVelocity;
 uniform float uTime, uDpr, uSize, uShapeThreshold, uClickPulse, uScroll;
-uniform vec3 uLightPos, uMouse3D;
+uniform vec3 uLightPos, uMouse3D, uCamPos;
 uniform float uZoomGrow, uDensityCull, uMouseScrollTh, uHoverScale;
 uniform float uPointFade;
 attribute vec2 aFboUv;
@@ -232,11 +232,16 @@ void main(){
   vColorClass=cc; vIsComet=isComet;
   float sp=uScroll;
   float zoomGrow=mix(1.0,uZoomGrow,sp*sp);
-  float densityCull=step(sp*sp*uDensityCull,aRandom.z);
+
+  // depth-based culling: particles closer to camera are hidden first during zoom
+  float camDist=length(pos-uCamPos);
+  float nearCull=1.0-smoothstep(1.0,3.5,camDist)*sp*0.7;
+  float densityCull=step(sp*sp*uDensityCull*nearCull,aRandom.z);
+
   float scale=uSize*aScale*zoomGrow*densityCull;
   if(isComet>0.5){
-    float streak=length(vel)*60.0;
-    scale*=mix(0.3,0.7,aRandom.x)*(1.0+min(streak,2.0));
+    float streak=length(vel)*80.0;
+    scale*=mix(0.5,1.2,aRandom.x)*(1.0+min(streak,3.0));
   } else if(selected>0.5){
     if(cc<0.18) scale*=mix(0.5,1.0,aRandom.x);
     else if(cc<0.35) scale*=mix(0.35,0.8,aRandom.x);
@@ -395,6 +400,7 @@ function FBOSystem() {
       uZoomGrow: { value: C.ZOOM_GROW_MAX }, uDensityCull: { value: C.ZOOM_DENSITY_CULL },
       uMouseScrollTh: { value: C.MOUSE_SCROLL_THRESHOLD }, uHoverScale: { value: C.HOVER_SCALE_BOOST },
       uPointFade: { value: 1.0 },
+      uCamPos: { value: new THREE.Vector3(0, 0, 8) },
     },
     vertexShader: PT_VERT, fragmentShader: PT_FRAG,
     transparent: true, depthTest: true, depthWrite: true,
@@ -441,8 +447,9 @@ function FBOSystem() {
 
     sharedTime.value = t;
 
-    /* cross-fade: points fade out, 3D bodies fade in */
-    const bodyT = Math.max(0, Math.min(1, (sp - C.BODY_APPEAR_SCROLL) / (C.BODY_FULL_SCROLL - C.BODY_APPEAR_SCROLL)));
+    /* smooth cross-fade: points fade out, 3D bodies fade in */
+    const rawT = Math.max(0, Math.min(1, (sp - C.BODY_APPEAR_SCROLL) / (C.BODY_FULL_SCROLL - C.BODY_APPEAR_SCROLL)));
+    const bodyT = rawT * rawT * (3 - 2 * rawT);
     const pointFade = 1 - bodyT;
 
     ptMat.uniforms.tPosition.value = pRT[ping.current.p].texture;
@@ -452,6 +459,7 @@ function FBOSystem() {
     ptMat.uniforms.uScroll.value = sp;
     ptMat.uniforms.uMouse3D.value.copy(mouse3D);
     ptMat.uniforms.uPointFade.value = pointFade;
+    ptMat.uniforms.uCamPos.value.copy(state.camera.position);
 
     if (pointsRef.current) {
       pointsRef.current.visible = pointFade > 0.01;
@@ -476,7 +484,7 @@ function FBOSystem() {
       </points>
 
       {/* 3D bodies: visible when zoomed in */}
-      <CelestialBodies
+      <CelestialBodiesWrapper
         allocs={allocs}
         posTex={getPosRT}
         gl={gl}
@@ -486,6 +494,11 @@ function FBOSystem() {
       />
     </group>
   );
+}
+
+function CelestialBodiesWrapper(props: Omit<Parameters<typeof CelestialBodies>[0], "camPos">) {
+  const { camera } = useThree();
+  return <CelestialBodies {...props} camPos={camera.position} />;
 }
 
 function OrbSphere() {
@@ -569,6 +582,27 @@ function Background() {
         float vig=1.0-smoothstep(0.4,1.4,length((uv-0.5)*vec2(1.6,1.2)));
         color*=mix(0.7,1.0,vig);
         color+=rand(uv*800.0+fract(uTime*0.5))*0.04*dark-0.02*dark;
+
+        // distant stars appear as background darkens during zoom
+        float starVis=smoothstep(0.15,0.5,uScroll);
+        if(starVis>0.0){
+          for(int i=0;i<3;i++){
+            vec2 grid=uv*vec2(40.0+float(i)*20.0,30.0+float(i)*15.0);
+            vec2 cell=floor(grid);
+            vec2 f=fract(grid);
+            float h=rand(cell+float(i)*100.0);
+            if(h>0.92){
+              vec2 center=vec2(rand(cell+0.1+float(i)*50.0),rand(cell+0.2+float(i)*50.0));
+              float d=length(f-center);
+              float brightness=rand(cell+0.3+float(i)*50.0);
+              float twinkle=0.6+0.4*sin(uTime*(1.5+brightness*3.0)+h*30.0);
+              float star=smoothstep(0.08,0.0,d)*brightness*twinkle*starVis;
+              vec3 starCol=mix(vec3(1.0,0.95,0.85),vec3(0.8,0.88,1.0),brightness);
+              color+=starCol*star*0.6;
+            }
+          }
+        }
+
         gl_FragColor=vec4(color,1.0);
       }`,
     depthTest: false, depthWrite: false,

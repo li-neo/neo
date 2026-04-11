@@ -94,12 +94,13 @@ interface CelestialProps {
   time: { value: number };
   scroll: { value: number };
   mouse: THREE.Vector3;
+  camPos: THREE.Vector3;
 }
 
 /**
  * Root component: reads FBO once per frame, dispatches position data to all body groups.
  */
-export function CelestialBodies({ allocs, posTex, gl, time, scroll, mouse }: CelestialProps) {
+export function CelestialBodies({ allocs, posTex, gl, time, scroll, mouse, camPos }: CelestialProps) {
   const posDataRef = useRef<Float32Array>(new Float32Array(TEX * TEX * 4));
 
   useFrame(() => {
@@ -111,7 +112,7 @@ export function CelestialBodies({ allocs, posTex, gl, time, scroll, mouse }: Cel
   return (
     <>
       {allocs.map((a) => (
-        <BodyGroup key={a.type} alloc={a} posData={posDataRef} time={time} scroll={scroll} />
+        <BodyGroup key={a.type} alloc={a} posData={posDataRef} time={time} scroll={scroll} camPos={camPos} />
       ))}
     </>
   );
@@ -149,11 +150,12 @@ function buildSatelliteGeo() {
 }
 
 /* ── per‑type rendering ── */
-function BodyGroup({ alloc, posData, time, scroll }: {
+function BodyGroup({ alloc, posData, time, scroll, camPos }: {
   alloc: BodyAlloc;
   posData: React.RefObject<Float32Array>;
   time: { value: number };
   scroll: { value: number };
+  camPos: THREE.Vector3;
 }) {
   const n = alloc.indices.length;
   const meshRef = useRef<THREE.InstancedMesh>(null);
@@ -276,15 +278,22 @@ function BodyGroup({ alloc, posData, time, scroll }: {
     const mesh = meshRef.current;
     const hasRing = ringRef.current && (alloc.type === BodyType.RingPlanet || alloc.type === BodyType.BlackHole);
 
+    const cx = camPos.x, cy = camPos.y, cz = camPos.z;
+
     for (let j = 0; j < n; j++) {
       const gIdx = alloc.indices[j];
       const i4 = gIdx * 4;
       const px = pd[i4], py = pd[i4 + 1], pz = pd[i4 + 2];
       const life = pd[i4 + 3];
 
+      // depth-based culling: particles closer to camera are hidden first
+      const dx = px - cx, dy = py - cy, dz = pz - cz;
+      const camDist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+      const nearFade = Math.min(1, camDist * 0.8);
+
       const cullRand = alloc.seeds[j];
-      const visible = life > 0.01 && cullRand > cullTh;
-      const s = visible ? alloc.scales[j] * zoomGrow * bodyT : 0;
+      const visible = life > 0.01 && cullRand > cullTh && nearFade > 0.15;
+      const s = visible ? alloc.scales[j] * zoomGrow * bodyT * nearFade : 0;
 
       _dummy.position.set(px, py, pz);
       const selfRot = t * (0.3 + alloc.seeds[j] * 0.7);
