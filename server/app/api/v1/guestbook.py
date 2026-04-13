@@ -106,6 +106,7 @@ def delete_entry(entry_id: int, _admin=Depends(get_admin_user), db: Session = De
 
 
 @router.put("/{entry_id}")
+@router.patch("/{entry_id}")
 def update_entry(
     entry_id: int,
     body: GuestbookUpdate,

@@ -52,6 +52,7 @@ def create_project(body: ProjectCreate, _: User = Depends(get_admin_user), db: S
 
 
 @router.put("/{slug}")
+@router.patch("/{slug}")
 def update_project(slug: str, body: ProjectUpdate, _: User = Depends(get_admin_user), db: Session = Depends(get_db)):
     project = db.query(Project).filter(Project.slug == slug).first()
     if not project:

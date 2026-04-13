@@ -1,12 +1,14 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useI18n, type TKey } from "@/lib/i18n";
 import { api, type Project, type Skill, type Post, type GuestbookEntry } from "@/lib/api";
 import { Navbar } from "@/components/layout/navbar";
 import { LocaleToggle } from "@/components/layout/locale-toggle";
 import { MarkdownRenderer } from "@/components/blocks/markdown-renderer";
 import { embedPostSourceMeta, parsePostSourceMeta, sourceLabel } from "@/lib/post-content";
+import { SingleOptionInput, MultiOptionInput } from "@/components/ui/flexible-fields";
+import { ensureStringArray, mergeFlexibleOptions } from "@/lib/flexible-options";
 
 /* ─── token helper ─── */
 const TOKEN_KEY = "neo-admin-token";
@@ -317,14 +319,16 @@ function GitHubImportPanel({ token, t, toast, onDone }: PanelProps & { onDone: (
 
 /* ─── Projects Panel ─── */
 const PROJECT_CREATE_KEYS = ["slug", "title", "description", "category", "tech_stack", "cover_url", "repo_url", "demo_url", "hf_url", "featured", "status"] as const;
+const DEFAULT_PROJECT_CATEGORIES = ["llm", "vla", "multimodal", "world_model", "tool"] as const;
+const DEFAULT_SKILL_CATEGORIES = ["development", "documentation", "devops", "ml", "data"] as const;
 
-function projectFields(t: (k: TKey) => string): FieldDef[] {
+function projectFields(t: (k: TKey) => string, categoryOptions: string[], techStackOptions: string[]): FieldDef[] {
   return [
     { key: "title", label: t("admin.fTitle"), type: "text" },
     { key: "slug", label: t("admin.fSlug"), type: "text" },
-    { key: "category", label: t("admin.fCategory"), type: "select", options: ["llm", "vla", "multimodal", "world_model", "tool"] },
+    { key: "category", label: t("admin.fCategory"), type: "single_option", options: categoryOptions },
     { key: "description", label: t("admin.fDescription"), type: "textarea" },
-    { key: "tech_stack", label: t("admin.fTechStack"), type: "text" },
+    { key: "tech_stack", label: t("admin.fTechStack"), type: "multi_option", options: techStackOptions },
     { key: "cover_url", label: t("admin.fCoverUrl"), type: "url_with_upload" },
     { key: "repo_url", label: t("admin.fRepoUrl"), type: "text" },
     { key: "demo_url", label: t("admin.fDemoUrl"), type: "text" },
@@ -354,6 +358,17 @@ function ProjectsPanel({ token, t, toast }: PanelProps) {
   const [projects, setProjects] = useState<Project[]>([]);
   const [editing, setEditing] = useState<Partial<Project> | null>(null);
   const [saving, setSaving] = useState(false);
+  const categoryOptions = useMemo(
+    () => mergeFlexibleOptions(DEFAULT_PROJECT_CATEGORIES, projects.map((item) => item.category)),
+    [projects],
+  );
+  const techStackOptions = useMemo(
+    () => mergeFlexibleOptions(
+      ...projects.map((item) => item.tech_stack ?? []),
+      editing ? ensureStringArray(editing.tech_stack) : [],
+    ),
+    [editing, projects],
+  );
 
   const load = useCallback(() => {
     api.projects.list("include_all=true&page_size=100", {
@@ -392,11 +407,11 @@ function ProjectsPanel({ token, t, toast }: PanelProps) {
           className="rounded-lg border border-accent/40 bg-accent/10 px-4 py-2 text-sm font-medium text-accent hover:bg-accent/20">
           {t("admin.ghImport")}
         </button>
-        <button onClick={() => setEditing({ title: "", slug: "", category: "llm", description: "", status: "published", featured: false })}
+        <button onClick={() => setEditing({ title: "", slug: "", category: "llm", description: "", tech_stack: [], status: "published", featured: false })}
           className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-foreground">{t("admin.create")}</button>
       </div>
       {showGhImport && <GitHubImportPanel token={token} t={t} toast={toast} onDone={() => { setShowGhImport(false); load(); }} />}
-      {editing && <EditForm fields={projectFields(t)} data={editing} onChange={setEditing} onSave={save} onCancel={() => setEditing(null)} t={t} saving={saving} token={token} />}
+      {editing && <EditForm fields={projectFields(t, categoryOptions, techStackOptions)} data={editing} onChange={setEditing} onSave={save} onCancel={() => setEditing(null)} t={t} saving={saving} token={token} />}
       <div className="space-y-2">
         {projects.map(p => (
           <div key={p.slug} className="flex items-center justify-between rounded-xl border border-border/50 bg-card p-4">
@@ -420,11 +435,11 @@ function ProjectsPanel({ token, t, toast }: PanelProps) {
 /* ─── Skills Panel ─── */
 const SKILL_CREATE_KEYS = ["slug", "name", "description", "category", "version", "platform", "install_command", "source_url", "status"] as const;
 
-function skillFields(t: (k: TKey) => string): FieldDef[] {
+function skillFields(t: (k: TKey) => string, categoryOptions: string[]): FieldDef[] {
   return [
     { key: "name", label: t("admin.fName"), type: "text" },
     { key: "slug", label: t("admin.fSlug"), type: "text" },
-    { key: "category", label: t("admin.fCategory"), type: "select", options: ["development", "documentation", "devops", "ml", "data"] },
+    { key: "category", label: t("admin.fCategory"), type: "single_option", options: categoryOptions },
     { key: "description", label: t("admin.fDescription"), type: "textarea" },
     { key: "version", label: t("admin.fVersion"), type: "text" },
     { key: "platform", label: t("admin.fPlatform"), type: "select", options: ["openclaw", "mcp", "other"] },
@@ -438,6 +453,10 @@ function SkillsPanel({ token, t, toast }: PanelProps) {
   const [skills, setSkills] = useState<Skill[]>([]);
   const [editing, setEditing] = useState<Partial<Skill> | null>(null);
   const [saving, setSaving] = useState(false);
+  const categoryOptions = useMemo(
+    () => mergeFlexibleOptions(DEFAULT_SKILL_CATEGORIES, skills.map((item) => item.category)),
+    [skills],
+  );
 
   const load = useCallback(() => {
     api.skills.list("include_all=true&page_size=100", {
@@ -475,7 +494,7 @@ function SkillsPanel({ token, t, toast }: PanelProps) {
         <button onClick={() => setEditing({ name: "", slug: "", category: "development", description: "", status: "published", version: "0.1.0", platform: "openclaw" })}
           className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-foreground">{t("admin.create")}</button>
       </div>
-      {editing && <EditForm fields={skillFields(t)} data={editing} onChange={setEditing} onSave={save} onCancel={() => setEditing(null)} t={t} saving={saving} token={token} />}
+      {editing && <EditForm fields={skillFields(t, categoryOptions)} data={editing} onChange={setEditing} onSave={save} onCancel={() => setEditing(null)} t={t} saving={saving} token={token} />}
       <div className="space-y-2">
         {skills.map(s => (
           <div key={s.slug} className="flex items-center justify-between rounded-xl border border-border/50 bg-card p-4">
@@ -950,7 +969,7 @@ function ChatSessionsPanel({ token, t }: PanelProps) {
 interface FieldDef {
   key: string;
   label: string;
-  type: "text" | "textarea" | "select" | "checkbox" | "url_with_upload";
+  type: "text" | "textarea" | "select" | "checkbox" | "url_with_upload" | "single_option" | "multi_option";
   options?: string[];
 }
 
@@ -994,9 +1013,27 @@ function EditForm({ fields, data, onChange, onSave, onCancel, t, saving, token }
 
             {f.type === "text" && (
               <input type="text"
-                value={f.key === "tech_stack" ? (Array.isArray(rawValue) ? (rawValue as string[]).join(", ") : stringValue) : stringValue}
-                onChange={e => set(f.key, f.key === "tech_stack" ? e.target.value.split(",").map(s => s.trim()) : e.target.value)}
+                value={stringValue}
+                onChange={e => set(f.key, e.target.value)}
                 className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:border-accent focus:outline-none" />
+            )}
+
+            {f.type === "single_option" && (
+              <SingleOptionInput
+                value={stringValue}
+                options={f.options ?? []}
+                onChange={(next) => set(f.key, next)}
+                placeholder={f.label}
+              />
+            )}
+
+            {f.type === "multi_option" && (
+              <MultiOptionInput
+                values={ensureStringArray(rawValue)}
+                options={f.options ?? []}
+                onChange={(next) => set(f.key, next)}
+                placeholder={f.label}
+              />
             )}
 
             {f.type === "url_with_upload" && (

@@ -4,6 +4,9 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "dev:stable": "next build && next start",
+    "clean:cache": "rm -rf .next",
+    "preview:stable": "rm -rf .next && next build && next start",
     "build": "next build",
     "start": "next start",
     "lint": "next lint"

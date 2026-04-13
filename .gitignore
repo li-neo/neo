@@ -46,3 +46,5 @@ htmlcov/
 *.pid
 .pids/
 .cache/
+.dbg/
+.neo-cli/

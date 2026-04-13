@@ -5,17 +5,20 @@ import { motion } from "framer-motion";
 import { useRouter } from "next/navigation";
 import { api, type Project } from "@/lib/api";
 import { useI18n, type TKey } from "@/lib/i18n";
+import { SingleOptionInput, MultiOptionInput } from "@/components/ui/flexible-fields";
+import { ensureStringArray, mergeFlexibleOptions } from "@/lib/flexible-options";
 
 type ProjectCategoryOption =
   | { key: string; labelKey: TKey }
   | { key: string; label: string };
 
-const CATEGORIES: ProjectCategoryOption[] = [
+const DEFAULT_CATEGORIES: ProjectCategoryOption[] = [
   { key: "", labelKey: "projects.all" as const },
   { key: "llm", label: "LLM" },
   { key: "vla", label: "VLA" },
   { key: "multimodal", label: "Multimodal" },
   { key: "world_model", label: "World Model" },
+  { key: "tool", label: "Tool" },
 ];
 
 const TOKEN_KEY = "neo-admin-token";
@@ -24,17 +27,17 @@ const PROJECT_CREATE_KEYS = ["slug", "title", "description", "category", "tech_s
 interface FieldDef {
   key: string;
   label: string;
-  type: "text" | "textarea" | "select" | "checkbox" | "url_with_upload";
+  type: "text" | "textarea" | "select" | "checkbox" | "url_with_upload" | "single_option" | "multi_option";
   options?: string[];
 }
 
-function projectFields(t: (k: TKey) => string): FieldDef[] {
+function projectFields(t: (k: TKey) => string, categoryOptions: string[], techStackOptions: string[]): FieldDef[] {
   return [
     { key: "title", label: t("admin.fTitle"), type: "text" },
     { key: "slug", label: t("admin.fSlug"), type: "text" },
-    { key: "category", label: t("admin.fCategory"), type: "select", options: ["llm", "vla", "multimodal", "world_model", "tool"] },
+    { key: "category", label: t("admin.fCategory"), type: "single_option", options: categoryOptions },
     { key: "description", label: t("admin.fDescription"), type: "textarea" },
-    { key: "tech_stack", label: t("admin.fTechStack"), type: "text" },
+    { key: "tech_stack", label: t("admin.fTechStack"), type: "multi_option", options: techStackOptions },
     { key: "cover_url", label: t("admin.fCoverUrl"), type: "url_with_upload" },
     { key: "repo_url", label: t("admin.fRepoUrl"), type: "text" },
     { key: "demo_url", label: t("admin.fDemoUrl"), type: "text" },
@@ -108,6 +111,8 @@ function ProjectEditSheet({
   onSave,
   onCancel,
   saving,
+  categoryOptions,
+  techStackOptions,
 }: {
   token: string;
   data: Record<string, unknown>;
@@ -115,6 +120,8 @@ function ProjectEditSheet({
   onSave: () => void;
   onCancel: () => void;
   saving: boolean;
+  categoryOptions: string[];
+  techStackOptions: string[];
 }) {
   const { t } = useI18n();
   const fileRef = useRef<HTMLInputElement>(null);
@@ -156,7 +163,7 @@ function ProjectEditSheet({
         </div>
 
         <div className="grid gap-4 sm:grid-cols-2">
-          {projectFields(t).map((field) => {
+          {projectFields(t, categoryOptions, techStackOptions).map((field) => {
             const rawValue = data[field.key];
             const stringValue = String(rawValue ?? "");
             const previewUrl = typeof rawValue === "string" ? rawValue.trim() : "";
@@ -168,9 +175,27 @@ function ProjectEditSheet({
                 {field.type === "text" && (
                   <input
                     type="text"
-                    value={field.key === "tech_stack" ? (Array.isArray(rawValue) ? (rawValue as string[]).join(", ") : stringValue) : stringValue}
-                    onChange={(e) => set(field.key, field.key === "tech_stack" ? e.target.value.split(",").map((item) => item.trim()) : e.target.value)}
+                    value={stringValue}
+                    onChange={(e) => set(field.key, e.target.value)}
                     className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:border-accent focus:outline-none"
+                  />
+                )}
+
+                {field.type === "single_option" && (
+                  <SingleOptionInput
+                    value={stringValue}
+                    options={field.options ?? []}
+                    onChange={(next) => set(field.key, next)}
+                    placeholder={field.label}
+                  />
+                )}
+
+                {field.type === "multi_option" && (
+                  <MultiOptionInput
+                    values={ensureStringArray(rawValue)}
+                    options={field.options ?? []}
+                    onChange={(next) => set(field.key, next)}
+                    placeholder={field.label}
                   />
                 )}
 
@@ -284,9 +309,11 @@ function ProjectEditSheet({
 export function ProjectList({
   projects,
   activeCategory,
+  categoryOptions: initialCategoryOptions,
 }: {
   projects: Project[];
   activeCategory?: string;
+  categoryOptions?: string[];
 }) {
   const { t } = useI18n();
   const router = useRouter();
@@ -297,6 +324,32 @@ export function ProjectList({
   const [toast, setToast] = useState<string | null>(null);
   const [items, setItems] = useState<Project[]>(projects);
   const visibleProjects = useMemo(() => items, [items]);
+  const categoryOptions = useMemo(
+    () => mergeFlexibleOptions(
+      DEFAULT_CATEGORIES.map((item) => item.key).filter(Boolean),
+      initialCategoryOptions ?? [],
+      items.map((item) => item.category),
+      activeCategory ? [activeCategory] : [],
+    ),
+    [activeCategory, initialCategoryOptions, items],
+  );
+  const techStackOptions = useMemo(
+    () => mergeFlexibleOptions(
+      ...items.map((item) => item.tech_stack ?? []),
+      editing && "tech_stack" in editing ? ensureStringArray(editing.tech_stack) : [],
+    ),
+    [editing, items],
+  );
+  const categoryTabs = useMemo<ProjectCategoryOption[]>(
+    () => [
+      DEFAULT_CATEGORIES[0],
+      ...categoryOptions.map((option) => {
+        const preset = DEFAULT_CATEGORIES.find((item) => item.key === option);
+        return preset ?? { key: option, label: option };
+      }),
+    ],
+    [categoryOptions],
+  );
 
   useEffect(() => {
     setItems(projects);
@@ -393,6 +446,8 @@ export function ProjectList({
           onSave={saveProject}
           onCancel={() => setEditing(null)}
           saving={saving}
+          categoryOptions={categoryOptions}
+          techStackOptions={techStackOptions}
         />
       )}
 
@@ -412,7 +467,7 @@ export function ProjectList({
       )}
 
       <div className="mb-10 flex flex-wrap gap-2">
-        {CATEGORIES.map((cat) => (
+        {categoryTabs.map((cat) => (
           <a
             key={cat.key}
             href={cat.key ? `/projects?category=${cat.key}` : "/projects"}

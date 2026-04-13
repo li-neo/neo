@@ -5,22 +5,25 @@ import { motion } from "framer-motion";
 import { useRouter } from "next/navigation";
 import { api, type Skill } from "@/lib/api";
 import { useI18n, type TKey } from "@/lib/i18n";
+import { SingleOptionInput } from "@/components/ui/flexible-fields";
+import { mergeFlexibleOptions } from "@/lib/flexible-options";
 
 const TOKEN_KEY = "neo-admin-token";
 const SKILL_CREATE_KEYS = ["slug", "name", "description", "category", "version", "platform", "install_command", "source_url", "status"] as const;
+const DEFAULT_SKILL_CATEGORIES = ["development", "documentation", "devops", "ml", "data"] as const;
 
 interface FieldDef {
   key: string;
   label: string;
-  type: "text" | "textarea" | "select";
+  type: "text" | "textarea" | "select" | "single_option";
   options?: string[];
 }
 
-function skillFields(t: (k: TKey) => string): FieldDef[] {
+function skillFields(t: (k: TKey) => string, categoryOptions: string[]): FieldDef[] {
   return [
     { key: "name", label: t("admin.fName"), type: "text" },
     { key: "slug", label: t("admin.fSlug"), type: "text" },
-    { key: "category", label: t("admin.fCategory"), type: "select", options: ["development", "documentation", "devops", "ml", "data"] },
+    { key: "category", label: t("admin.fCategory"), type: "single_option", options: categoryOptions },
     { key: "description", label: t("admin.fDescription"), type: "textarea" },
     { key: "version", label: t("admin.fVersion"), type: "text" },
     { key: "platform", label: t("admin.fPlatform"), type: "select", options: ["openclaw", "mcp", "other"] },
@@ -46,12 +49,14 @@ function SkillEditSheet({
   onSave,
   onCancel,
   saving,
+  categoryOptions,
 }: {
   data: Record<string, unknown>;
   onChange: (next: Record<string, unknown>) => void;
   onSave: () => void;
   onCancel: () => void;
   saving: boolean;
+  categoryOptions: string[];
 }) {
   const { t } = useI18n();
   const set = (key: string, value: unknown) => onChange({ ...data, [key]: value });
@@ -70,7 +75,7 @@ function SkillEditSheet({
         </div>
 
         <div className="grid gap-4 sm:grid-cols-2">
-          {skillFields(t).map((field) => {
+          {skillFields(t, categoryOptions).map((field) => {
             const stringValue = String(data[field.key] ?? "");
             return (
               <div key={field.key} className={field.type === "textarea" ? "sm:col-span-2" : ""}>
@@ -81,6 +86,14 @@ function SkillEditSheet({
                     value={stringValue}
                     onChange={(e) => set(field.key, e.target.value)}
                     className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:border-accent focus:outline-none"
+                  />
+                )}
+                {field.type === "single_option" && (
+                  <SingleOptionInput
+                    value={stringValue}
+                    options={field.options ?? []}
+                    onChange={(next) => set(field.key, next)}
+                    placeholder={field.label}
                   />
                 )}
                 {field.type === "textarea" && (
@@ -130,6 +143,10 @@ export function SkillList({ skills }: { skills: Skill[] }) {
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const visibleSkills = useMemo(() => items, [items]);
+  const categoryOptions = useMemo(
+    () => mergeFlexibleOptions(DEFAULT_SKILL_CATEGORIES, items.map((item) => item.category)),
+    [items],
+  );
 
   useEffect(() => {
     setItems(skills);
@@ -219,6 +236,7 @@ export function SkillList({ skills }: { skills: Skill[] }) {
           onSave={saveSkill}
           onCancel={() => setEditing(null)}
           saving={saving}
+          categoryOptions={categoryOptions}
         />
       )}
 

@@ -9,13 +9,14 @@ from app.core.config import get_settings
 from app.core.database import get_engine, get_session_factory, Base
 from app.core.response import error
 from app.api.v1.router import api_router
+from app.api.v2.router import api_v2_router
 
 settings = get_settings()
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
-    import app.models  # noqa: F811 — ensure all models registered
+async def lifespan(_app: FastAPI):
+    __import__("app.models")  # ensure all models registered
     Base.metadata.create_all(bind=get_engine())
     _seed_integrations()
     yield
@@ -40,6 +41,7 @@ app.add_middleware(
 )
 
 app.include_router(api_router, prefix=settings.api_prefix)
+app.include_router(api_v2_router, prefix="/api/v2")
 
 upload_path = Path(settings.upload_dir)
 upload_path.mkdir(parents=True, exist_ok=True)
@@ -52,12 +54,12 @@ def health():
 
 
 @app.exception_handler(404)
-async def not_found_handler(request: Request, exc):
+async def not_found_handler(_request: Request, _exc):
     return JSONResponse(status_code=404, content=error(code=404, message="Not found"))
 
 
 @app.exception_handler(500)
-async def internal_error_handler(request: Request, exc):
+async def internal_error_handler(_request: Request, _exc):
     return JSONResponse(status_code=500, content=error(code=500, message="Internal server error"))
 
 

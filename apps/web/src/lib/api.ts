@@ -181,6 +181,16 @@ export const api = {
   auth: {
     me: (token: string) => authReq<{ id: number; username: string; role: string; avatar_url: string | null }>("/auth/me", token),
     githubLoginUrl: () => api.get<{ url: string }>("/auth/github/login"),
+    cliBootstrapStatus: (sessionId: string, userCode: string) =>
+      api.get<{ session_id: string; user_code: string; status: string; client_name: string | null; token_name: string; approved_at: string | null; claimed_at: string | null; expires_at: string }>(
+        `/auth/cli-bootstrap/${sessionId}?user_code=${encodeURIComponent(userCode)}`
+      ),
+    cliBootstrapApprove: (token: string, sessionId: string, userCode: string) =>
+      authPost<{ session_id: string; status: string; client_name: string | null; token_name: string; token_prefix: string | null; approved_at: string | null }>(
+        "/auth/cli-bootstrap/approve",
+        token,
+        { session_id: sessionId, user_code: userCode }
+      ),
   },
 
   admin: {

@@ -23,6 +23,7 @@ class Settings(BaseSettings):
     api_port: int = 8000
     api_prefix: str = "/api/v1"
     cors_origins: list[str] = ["http://localhost:3000"]
+    site_url: str = "http://localhost:3000"
 
     # GitHub OAuth
     github_client_id: str = ""

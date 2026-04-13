@@ -20,14 +20,18 @@ export default async function ProjectsPage({
   const params = await searchParams;
   const category = params.category;
   const qs = category ? `category=${category}` : "";
-  const res = await api.projects.list(qs, { cache: "no-store" });
+  const [res, allRes] = await Promise.all([
+    api.projects.list(qs, { cache: "no-store" }),
+    api.projects.list("page_size=100", { cache: "no-store" }),
+  ]);
+  const categoryOptions = Array.from(new Set((allRes.data ?? []).map((item) => item.category).filter(Boolean)));
 
   return (
     <>
       <Navbar />
       <main className="mx-auto max-w-6xl px-6 pt-24 pb-16">
         <PageHeader titleKey="projects.title" subtitleKey="projects.subtitle" />
-        <ProjectList projects={res.data ?? []} activeCategory={category} />
+        <ProjectList projects={res.data ?? []} activeCategory={category} categoryOptions={categoryOptions} />
       </main>
       <Footer />
     </>

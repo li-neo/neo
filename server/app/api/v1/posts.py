@@ -87,6 +87,7 @@ def import_post_link(body: PostImportUrl, _: User = Depends(get_admin_user)):
 
 
 @router.put("/{slug}")
+@router.patch("/{slug}")
 def update_post(slug: str, body: PostUpdate, _: User = Depends(get_admin_user), db: Session = Depends(get_db)):
     post = db.query(Post).filter(Post.slug == slug).first()
     if not post:

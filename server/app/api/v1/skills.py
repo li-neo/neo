@@ -52,6 +52,7 @@ def create_skill(body: SkillCreate, user: User = Depends(get_admin_user), db: Se
 
 
 @router.put("/{slug}")
+@router.patch("/{slug}")
 def update_skill(slug: str, body: SkillUpdate, _: User = Depends(get_admin_user), db: Session = Depends(get_db)):
     skill = db.query(Skill).filter(Skill.slug == slug).first()
     if not skill:
