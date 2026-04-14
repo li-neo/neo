@@ -44,6 +44,12 @@ export function EntityDocLayout({
   actionLinks,
   highlights,
   tocItems,
+  adminControls,
+  titleNode,
+  summaryNode,
+  coverNode,
+  contentNode,
+  metaNode,
 }: {
   backHref: string;
   backLabel: string;
@@ -62,6 +68,12 @@ export function EntityDocLayout({
   actionLinks: DocActionLink[];
   highlights?: DocHighlight[];
   tocItems?: TocItem[];
+  adminControls?: ReactNode;
+  titleNode?: ReactNode;
+  summaryNode?: ReactNode;
+  coverNode?: ReactNode;
+  contentNode?: ReactNode;
+  metaNode?: ReactNode;
 }) {
   return (
     <>
@@ -96,13 +108,15 @@ export function EntityDocLayout({
                         {icon ?? <FileText className="h-3.5 w-3.5" />}
                         {typeLabel}
                       </span>
+                      {adminControls}
                     </div>
 
                     <div className="space-y-4">
                       <h1 className="max-w-4xl text-4xl font-bold tracking-tight text-foreground sm:text-5xl lg:text-6xl">
-                        {title}
+                        {titleNode ?? title}
                       </h1>
-                      {summary && <p className="max-w-3xl text-lg leading-8 text-muted-foreground">{summary}</p>}
+                      {(summaryNode ?? summary) &&
+                        (summaryNode ?? <p className="max-w-3xl text-lg leading-8 text-muted-foreground">{summary}</p>)}
                     </div>
 
                     {highlights && highlights.length > 0 && (
@@ -135,31 +149,34 @@ export function EntityDocLayout({
 
               </section>
 
-              {coverUrl && (
-                <div className="overflow-hidden rounded-3xl border border-border/50 bg-card">
-                  <img src={coverUrl} alt={coverAlt} className="h-auto w-full object-cover" />
-                </div>
-              )}
+              {coverNode ??
+                (coverUrl && (
+                  <div className="overflow-hidden rounded-3xl border border-border/50 bg-card">
+                    <img src={coverUrl} alt={coverAlt} className="h-auto w-full object-cover" />
+                  </div>
+                ))}
 
               <div className="rounded-3xl border border-border/50 bg-card p-6 sm:p-8">
-                <MarkdownRenderer content={markdown} />
+                {contentNode ?? <MarkdownRenderer content={markdown} />}
               </div>
             </div>
 
             <aside className="space-y-6 xl:sticky xl:top-24 xl:self-start">
-              <div className="rounded-3xl border border-border/50 bg-card p-5">
-                <h2 className="mb-4 text-sm font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                  Overview
-                </h2>
-                <div className="space-y-3 text-sm">
-                  {metaItems.map((item) => (
-                    <div key={item.label} className="rounded-2xl bg-muted/30 px-4 py-3">
-                      <p className="mb-1 text-xs uppercase tracking-[0.14em] text-muted-foreground">{item.label}</p>
-                      <p className="text-foreground">{item.value}</p>
-                    </div>
-                  ))}
+              {metaNode ?? (
+                <div className="rounded-3xl border border-border/50 bg-card p-5">
+                  <h2 className="mb-4 text-sm font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                    Overview
+                  </h2>
+                  <div className="space-y-3 text-sm">
+                    {metaItems.map((item) => (
+                      <div key={item.label} className="rounded-2xl bg-muted/30 px-4 py-3">
+                        <p className="mb-1 text-xs uppercase tracking-[0.14em] text-muted-foreground">{item.label}</p>
+                        <p className="text-foreground">{item.value}</p>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              </div>
+              )}
 
               {tocItems && tocItems.length > 0 && (
                 <div className="rounded-3xl border border-border/50 bg-card p-5">
