@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import { useRouter } from "next/navigation";
@@ -300,12 +301,14 @@ export function SkillList({ skills }: { skills: Skill[] }) {
             </span>
           </div>
 
-          <h3 className="mb-2 text-lg font-semibold group-hover:text-accent transition-colors">
-            {skill.name}
-          </h3>
-          <p className="mb-5 text-sm text-muted-foreground line-clamp-3">
-            {skill.description}
-          </p>
+          <Link href={`/skills/${skill.slug}`} className="block">
+            <h3 className="mb-2 text-lg font-semibold transition-colors group-hover:text-accent">
+              {skill.name}
+            </h3>
+            <p className="mb-5 line-clamp-3 text-sm text-muted-foreground">
+              {skill.description}
+            </p>
+          </Link>
 
           {skill.install_command && (
             <div className="mb-4 rounded-lg bg-muted/50 px-3 py-2 font-mono text-xs text-muted-foreground">
@@ -331,6 +334,11 @@ export function SkillList({ skills }: { skills: Skill[] }) {
               {t("skills.viewSource")} &nearr;
             </a>
           )}
+          <div className="mt-3">
+            <Link href={`/skills/${skill.slug}`} className="text-xs text-accent transition-colors hover:text-foreground">
+              {t("skills.browseAll")} &rarr;
+            </Link>
+          </div>
         </motion.div>
       ))}
 

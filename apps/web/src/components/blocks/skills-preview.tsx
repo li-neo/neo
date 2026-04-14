@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { motion } from "framer-motion";
 import type { Skill } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
@@ -27,15 +28,15 @@ export function SkillsPreview({ skills }: { skills: Skill[] }) {
 
         <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
           {skills.map((skill, i) => (
-            <motion.a
+            <motion.div
               key={skill.slug}
-              href="/skills"
               initial={{ opacity: 0, y: 20 }}
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
               transition={{ duration: 0.5, delay: i * 0.08 }}
-              className="group rounded-2xl border border-border/50 bg-card p-6 transition-all hover:border-accent/50 hover:shadow-lg hover:shadow-accent/5"
+              className="group relative rounded-2xl border border-border/50 bg-card p-6 transition-all hover:border-accent/50 hover:shadow-lg hover:shadow-accent/5"
             >
+              <Link href={`/skills/${skill.slug}`} className="absolute inset-0" aria-label={skill.name} />
               <div className="mb-3 flex items-center justify-between">
                 <span className="rounded-md bg-accent/10 px-2 py-1 text-xs font-medium text-accent">
                   {skill.category}
@@ -57,7 +58,7 @@ export function SkillsPreview({ skills }: { skills: Skill[] }) {
                 </span>
                 <span>{skill.install_count.toLocaleString()} {t("skills.installs")}</span>
               </div>
-            </motion.a>
+            </motion.div>
           ))}
         </div>
 

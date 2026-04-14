@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { useRouter } from "next/navigation";
@@ -536,10 +537,12 @@ export function ProjectList({
                   </span>
                 )}
               </div>
-              <h3 className="mb-2 text-lg font-semibold">{project.title}</h3>
-              <p className="mb-4 line-clamp-3 text-sm text-muted-foreground">
-                {project.description}
-              </p>
+              <Link href={`/projects/${project.slug}`} className="block">
+                <h3 className="mb-2 text-lg font-semibold transition-colors group-hover:text-accent">{project.title}</h3>
+                <p className="mb-4 line-clamp-3 text-sm text-muted-foreground">
+                  {project.description}
+                </p>
+              </Link>
               {project.tech_stack && (
                 <div className="mb-4 flex flex-wrap gap-1.5">
                   {project.tech_stack.map((tech) => (
@@ -553,6 +556,9 @@ export function ProjectList({
                 </div>
               )}
               <div className="flex items-center gap-3 text-xs">
+                <Link href={`/projects/${project.slug}`} className="text-accent transition-colors hover:text-foreground">
+                  {t("projects.viewAll")} &rarr;
+                </Link>
                 {project.repo_url && (
                   <a
                     href={project.repo_url}

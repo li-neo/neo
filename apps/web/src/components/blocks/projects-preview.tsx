@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { motion } from "framer-motion";
 import type { Project } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
@@ -40,15 +41,15 @@ export function ProjectsPreview({ projects }: { projects: Project[] }) {
               color: "from-gray-500 to-zinc-400",
             };
             return (
-              <motion.a
+              <motion.div
                 key={project.slug}
-                href={`/projects?category=${project.category}`}
                 initial={{ opacity: 0, y: 20 }}
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }}
                 transition={{ duration: 0.5, delay: i * 0.1 }}
                 className="group relative overflow-hidden rounded-2xl border border-border/50 bg-card transition-all hover:border-border hover:shadow-lg hover:shadow-accent/5"
               >
+                <Link href={`/projects/${project.slug}`} className="absolute inset-0 z-10" aria-label={project.title} />
                 {project.cover_url && (
                   <div className="h-40 w-full overflow-hidden">
                     <img
@@ -89,7 +90,7 @@ export function ProjectsPreview({ projects }: { projects: Project[] }) {
                     </div>
                   )}
                 </div>
-              </motion.a>
+              </motion.div>
             );
           })}
         </div>
