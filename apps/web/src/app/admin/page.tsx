@@ -1101,13 +1101,12 @@ function EditForm({ fields, data, onChange, onSave, onCancel, t, saving, token }
 
             {f.type === "rich_editor" && (
               <RichEditor
+                key={`${data.id ?? "new"}-${f.key}`}
                 initialContent={stringValue}
                 token={token}
                 onChange={(json, md) => {
-                  set(f.key, json);
                   onChange({ ...data, [f.key]: json, [`_${f.key}_md`]: md });
                 }}
-                placeholder={f.label}
               />
             )}
 

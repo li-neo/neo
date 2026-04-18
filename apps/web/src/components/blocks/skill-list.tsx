@@ -114,10 +114,10 @@ function SkillEditSheet({
                 )}
                 {field.type === "rich_editor" && (
                   <RichEditor
+                    key={`${data.id ?? "new"}-${field.key}`}
                     initialContent={stringValue}
                     token={typeof window !== "undefined" ? localStorage.getItem(TOKEN_KEY) ?? undefined : undefined}
                     onChange={(json) => set(field.key, json)}
-                    placeholder={field.label}
                   />
                 )}
                 {field.type === "select" && (

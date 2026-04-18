@@ -218,10 +218,10 @@ function ProjectEditSheet({
 
                 {field.type === "rich_editor" && (
                   <RichEditor
+                    key={`${data.id ?? "new"}-${field.key}`}
                     initialContent={stringValue}
                     token={token}
                     onChange={(json) => set(field.key, json)}
-                    placeholder={field.label}
                   />
                 )}
 

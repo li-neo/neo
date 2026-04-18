@@ -1,8 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useCallback } from "react";
+import { useEffect, useRef, useCallback, useState } from "react";
 import {
-  BlockNoteEditor,
   type Block,
   type PartialBlock,
 } from "@blocknote/core";
@@ -11,25 +10,6 @@ import { BlockNoteView } from "@blocknote/mantine";
 import "@blocknote/mantine/style.css";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-
-interface RichEditorProps {
-  initialContent?: string;
-  onChange?: (jsonContent: string, markdown: string) => void;
-  token?: string;
-  editable?: boolean;
-  placeholder?: string;
-}
-
-function parseInitialContent(raw: string | undefined): PartialBlock[] | undefined {
-  if (!raw || raw.trim() === "") return undefined;
-  try {
-    const parsed = JSON.parse(raw);
-    if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-  } catch {
-    // not JSON — will convert from markdown in the hook
-  }
-  return undefined;
-}
 
 async function uploadFile(file: File, token?: string): Promise<string> {
   const form = new FormData();
@@ -45,44 +25,60 @@ async function uploadFile(file: File, token?: string): Promise<string> {
   return `${API_BASE}${url}`;
 }
 
-export function RichEditor({
-  initialContent,
+function tryParseBlocks(raw: string | undefined): PartialBlock[] | undefined {
+  if (!raw || raw.trim() === "") return undefined;
+  try {
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+  } catch {
+    // not JSON
+  }
+  return undefined;
+}
+
+/* ─────────── Editor (editable) ─────────── */
+
+interface RichEditorProps {
+  initialContent?: string;
+  onChange?: (jsonContent: string, markdown: string) => void;
+  token?: string;
+  editable?: boolean;
+}
+
+function EditorInner({
+  initialBlocks,
+  markdownToLoad,
   onChange,
   token,
   editable = true,
-  placeholder,
-}: RichEditorProps) {
+}: {
+  initialBlocks?: PartialBlock[];
+  markdownToLoad?: string;
+  onChange?: (jsonContent: string, markdown: string) => void;
+  token?: string;
+  editable?: boolean;
+}) {
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
-  const initializedRef = useRef(false);
-  const initialContentRef = useRef(initialContent);
-
-  const parsedBlocks = useMemo(
-    () => parseInitialContent(initialContentRef.current),
-    [],
-  );
+  const loadedMdRef = useRef(false);
 
   const editor = useCreateBlockNote({
-    initialContent: parsedBlocks,
+    initialContent: initialBlocks,
     uploadFile: token ? (file: File) => uploadFile(file, token) : undefined,
   });
 
   useEffect(() => {
-    if (initializedRef.current) return;
-    const raw = initialContentRef.current;
-    if (!raw || raw.trim() === "") return;
-    if (parsedBlocks) return; // already loaded as JSON
-
+    if (loadedMdRef.current || !markdownToLoad || initialBlocks) return;
+    loadedMdRef.current = true;
     (async () => {
       try {
-        const blocks = await editor.tryParseMarkdownToBlocks(raw);
+        const blocks = await editor.tryParseMarkdownToBlocks(markdownToLoad);
         editor.replaceBlocks(editor.document, blocks);
       } catch {
-        // fallback: leave default empty doc
+        // ignore
       }
     })();
-    initializedRef.current = true;
-  }, [editor, parsedBlocks]);
+  }, [editor, markdownToLoad, initialBlocks]);
 
   const handleChange = useCallback(async () => {
     if (!onChangeRef.current) return;
@@ -99,43 +95,48 @@ export function RichEditor({
         editable={editable}
         onChange={handleChange}
         theme="light"
-        data-placeholder={placeholder}
       />
     </div>
   );
 }
 
-export function RichViewer({ content }: { content: string | null | undefined }) {
-  if (!content || content.trim() === "") {
-    return null;
-  }
+/**
+ * Keyed wrapper — guarantees a fresh editor instance when `initialContent` changes.
+ * Parent should pass a unique `key` (e.g. the entity slug/id) so React unmounts
+ * the old editor and mounts a new one when switching between items.
+ */
+export function RichEditor({ initialContent, onChange, token, editable = true }: RichEditorProps) {
+  const blocks = tryParseBlocks(initialContent);
+  const mdToLoad = blocks ? undefined : initialContent;
 
-  let parsedBlocks: PartialBlock[] | undefined;
-  try {
-    const parsed = JSON.parse(content);
-    if (Array.isArray(parsed) && parsed.length > 0) {
-      parsedBlocks = parsed;
-    }
-  } catch {
-    // not JSON block content — use MarkdownRenderer instead
-    return null;
-  }
-
-  return <RichViewerInner blocks={parsedBlocks!} />;
+  return (
+    <EditorInner
+      initialBlocks={blocks}
+      markdownToLoad={mdToLoad}
+      onChange={onChange}
+      token={token}
+      editable={editable}
+    />
+  );
 }
 
-function RichViewerInner({ blocks }: { blocks: PartialBlock[] }) {
-  const editor = useCreateBlockNote({
-    initialContent: blocks,
-  });
+/* ─────────── Viewer (read-only) ─────────── */
+
+export function RichViewer({ content }: { content: string | null | undefined }) {
+  if (!content || content.trim() === "") return null;
+
+  const blocks = tryParseBlocks(content);
+  if (!blocks) return null;
+
+  return <ViewerInner blocks={blocks} />;
+}
+
+function ViewerInner({ blocks }: { blocks: PartialBlock[] }) {
+  const editor = useCreateBlockNote({ initialContent: blocks });
 
   return (
     <div className="neo-blocknote-viewer">
-      <BlockNoteView
-        editor={editor}
-        editable={false}
-        theme="light"
-      />
+      <BlockNoteView editor={editor} editable={false} theme="light" />
     </div>
   );
 }
