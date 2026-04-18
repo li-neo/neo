@@ -3,11 +3,24 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { ArrowUpRight, FileText } from "lucide-react";
+import dynamic from "next/dynamic";
 
 import { Footer } from "@/components/layout/footer";
 import { Navbar } from "@/components/layout/navbar";
 import { MarkdownRenderer } from "@/components/blocks/markdown-renderer";
 import type { TocItem } from "@/lib/markdown-doc";
+
+const RichViewerLazy = dynamic(
+  () => import("@/components/blocks/rich-editor").then(m => m.RichViewer),
+  { ssr: false, loading: () => <div className="h-32 animate-pulse rounded-2xl bg-muted/30" /> },
+);
+
+function isBlockNoteJson(content: string | null | undefined): boolean {
+  if (!content) return false;
+  const trimmed = content.trim();
+  if (!trimmed.startsWith("[")) return false;
+  try { const p = JSON.parse(trimmed); return Array.isArray(p); } catch { return false; }
+}
 
 type DetailState = "loading" | "ready" | "not_found";
 
@@ -157,7 +170,11 @@ export function EntityDocLayout({
                 ))}
 
               <div className="rounded-3xl border border-border/50 bg-card p-6 sm:p-8">
-                {contentNode ?? <MarkdownRenderer content={markdown} />}
+                {contentNode ?? (
+                  isBlockNoteJson(markdown)
+                    ? <RichViewerLazy content={markdown} />
+                    : <MarkdownRenderer content={markdown} />
+                )}
               </div>
             </div>
 

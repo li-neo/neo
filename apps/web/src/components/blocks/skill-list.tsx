@@ -6,6 +6,7 @@ import { motion } from "framer-motion";
 import { useRouter } from "next/navigation";
 import { api, type Skill } from "@/lib/api";
 import { useI18n, type TKey } from "@/lib/i18n";
+import { richTextToPlain } from "@/lib/utils";
 import { SingleOptionInput } from "@/components/ui/flexible-fields";
 import { mergeFlexibleOptions } from "@/lib/flexible-options";
 
@@ -306,7 +307,7 @@ export function SkillList({ skills }: { skills: Skill[] }) {
               {skill.name}
             </h3>
             <p className="mb-5 line-clamp-3 text-sm text-muted-foreground">
-              {skill.description}
+              {richTextToPlain(skill.description)}
             </p>
           </Link>
 

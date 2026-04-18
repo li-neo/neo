@@ -6,6 +6,7 @@ import { motion } from "framer-motion";
 import { useRouter } from "next/navigation";
 import { api, type Project } from "@/lib/api";
 import { useI18n, type TKey } from "@/lib/i18n";
+import { richTextToPlain } from "@/lib/utils";
 import { SingleOptionInput, MultiOptionInput } from "@/components/ui/flexible-fields";
 import { ensureStringArray, mergeFlexibleOptions } from "@/lib/flexible-options";
 
@@ -540,7 +541,7 @@ export function ProjectList({
               <Link href={`/projects/${project.slug}`} className="block">
                 <h3 className="mb-2 text-lg font-semibold transition-colors group-hover:text-accent">{project.title}</h3>
                 <p className="mb-4 line-clamp-3 text-sm text-muted-foreground">
-                  {project.description}
+                  {richTextToPlain(project.description)}
                 </p>
               </Link>
               {project.tech_stack && (
