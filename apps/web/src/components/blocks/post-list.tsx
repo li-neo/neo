@@ -7,6 +7,24 @@ import { api, type Post } from "@/lib/api";
 import { useI18n, dateLocale, type TKey } from "@/lib/i18n";
 import { MarkdownRenderer } from "@/components/blocks/markdown-renderer";
 import { embedPostSourceMeta, parsePostSourceMeta, sourceLabel } from "@/lib/post-content";
+import dynamic from "next/dynamic";
+
+const RichEditor = dynamic(
+  () => import("@/components/blocks/rich-editor").then(m => m.RichEditor),
+  { ssr: false, loading: () => <div className="h-48 animate-pulse rounded-2xl bg-muted/30" /> },
+);
+
+const RichViewerLazy = dynamic(
+  () => import("@/components/blocks/rich-editor").then(m => m.RichViewer),
+  { ssr: false, loading: () => <div className="h-32 animate-pulse rounded-2xl bg-muted/30" /> },
+);
+
+function isBlockNoteJson(content: string | null | undefined): boolean {
+  if (!content) return false;
+  const trimmed = content.trim();
+  if (!trimmed.startsWith("[")) return false;
+  try { const p = JSON.parse(trimmed); return Array.isArray(p); } catch { return false; }
+}
 
 const TOKEN_KEY = "neo-admin-token";
 const POST_CREATE_KEYS = ["slug", "title", "summary", "content", "cover_url", "tags", "reading_time", "published"] as const;
@@ -14,7 +32,7 @@ const POST_CREATE_KEYS = ["slug", "title", "summary", "content", "cover_url", "t
 interface FieldDef {
   key: string;
   label: string;
-  type: "text" | "textarea" | "checkbox" | "url_with_upload";
+  type: "text" | "textarea" | "checkbox" | "url_with_upload" | "rich_editor";
 }
 
 function postFields(t: (k: TKey) => string): FieldDef[] {
@@ -22,7 +40,7 @@ function postFields(t: (k: TKey) => string): FieldDef[] {
     { key: "title", label: t("admin.fTitle"), type: "text" },
     { key: "slug", label: t("admin.fSlug"), type: "text" },
     { key: "summary", label: t("admin.fSummary"), type: "textarea" },
-    { key: "content", label: t("admin.fContent"), type: "textarea" },
+    { key: "content", label: t("admin.fContent"), type: "rich_editor" },
     { key: "cover_url", label: t("admin.fCoverUrl"), type: "url_with_upload" },
     { key: "tags", label: t("admin.fTags"), type: "text" },
     { key: "reading_time", label: t("admin.fReadingTime"), type: "text" },
@@ -211,7 +229,7 @@ function PostEditSheet({
             const stringValue = field.key === "tags" && Array.isArray(rawValue) ? (rawValue as string[]).join(", ") : String(rawValue ?? "");
             const previewUrl = typeof rawValue === "string" ? rawValue.trim() : "";
             return (
-              <div key={field.key} className={field.type === "textarea" || field.type === "url_with_upload" ? "sm:col-span-2" : ""}>
+              <div key={field.key} className={field.type === "textarea" || field.type === "url_with_upload" || field.type === "rich_editor" ? "sm:col-span-2" : ""}>
                 <label className="mb-1 block text-xs font-medium text-muted-foreground">{field.label}</label>
                 {field.type === "text" && (
                   <input
@@ -225,8 +243,16 @@ function PostEditSheet({
                   <textarea
                     value={stringValue}
                     onChange={(e) => set(field.key, e.target.value)}
-                    rows={field.key === "content" ? 12 : 4}
+                    rows={4}
                     className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:border-accent focus:outline-none"
+                  />
+                )}
+                {field.type === "rich_editor" && (
+                  <RichEditor
+                    initialContent={stringValue}
+                    token={token}
+                    onChange={(json) => set(field.key, json)}
+                    placeholder={field.label}
                   />
                 )}
                 {field.type === "checkbox" && (
@@ -297,7 +323,9 @@ function PostEditSheet({
 
         {typeof data.content === "string" && data.content.trim().length > 0 && (
           <div className="mt-6 rounded-2xl border border-border/50 bg-card p-6">
-            <MarkdownRenderer content={data.content} />
+            {isBlockNoteJson(data.content as string)
+              ? <RichViewerLazy content={data.content as string} />
+              : <MarkdownRenderer content={data.content as string} />}
           </div>
         )}
       </div>

@@ -9,6 +9,12 @@ import { useI18n, type TKey } from "@/lib/i18n";
 import { richTextToPlain } from "@/lib/utils";
 import { SingleOptionInput } from "@/components/ui/flexible-fields";
 import { mergeFlexibleOptions } from "@/lib/flexible-options";
+import dynamic from "next/dynamic";
+
+const RichEditor = dynamic(
+  () => import("@/components/blocks/rich-editor").then(m => m.RichEditor),
+  { ssr: false, loading: () => <div className="h-48 animate-pulse rounded-2xl bg-muted/30" /> },
+);
 
 const TOKEN_KEY = "neo-admin-token";
 const SKILL_CREATE_KEYS = ["slug", "name", "description", "category", "version", "platform", "install_command", "source_url", "status"] as const;
@@ -17,7 +23,7 @@ const DEFAULT_SKILL_CATEGORIES = ["development", "documentation", "devops", "ml"
 interface FieldDef {
   key: string;
   label: string;
-  type: "text" | "textarea" | "select" | "single_option";
+  type: "text" | "textarea" | "select" | "single_option" | "rich_editor";
   options?: string[];
 }
 
@@ -26,7 +32,7 @@ function skillFields(t: (k: TKey) => string, categoryOptions: string[]): FieldDe
     { key: "name", label: t("admin.fName"), type: "text" },
     { key: "slug", label: t("admin.fSlug"), type: "text" },
     { key: "category", label: t("admin.fCategory"), type: "single_option", options: categoryOptions },
-    { key: "description", label: t("admin.fDescription"), type: "textarea" },
+    { key: "description", label: t("admin.fDescription"), type: "rich_editor" },
     { key: "version", label: t("admin.fVersion"), type: "text" },
     { key: "platform", label: t("admin.fPlatform"), type: "select", options: ["openclaw", "mcp", "other"] },
     { key: "install_command", label: t("admin.fInstallCmd"), type: "text" },
@@ -80,7 +86,7 @@ function SkillEditSheet({
           {skillFields(t, categoryOptions).map((field) => {
             const stringValue = String(data[field.key] ?? "");
             return (
-              <div key={field.key} className={field.type === "textarea" ? "sm:col-span-2" : ""}>
+              <div key={field.key} className={field.type === "textarea" || field.type === "rich_editor" ? "sm:col-span-2" : ""}>
                 <label className="mb-1 block text-xs font-medium text-muted-foreground">{field.label}</label>
                 {field.type === "text" && (
                   <input
@@ -104,6 +110,14 @@ function SkillEditSheet({
                     onChange={(e) => set(field.key, e.target.value)}
                     rows={4}
                     className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:border-accent focus:outline-none"
+                  />
+                )}
+                {field.type === "rich_editor" && (
+                  <RichEditor
+                    initialContent={stringValue}
+                    token={typeof window !== "undefined" ? localStorage.getItem(TOKEN_KEY) ?? undefined : undefined}
+                    onChange={(json) => set(field.key, json)}
+                    placeholder={field.label}
                   />
                 )}
                 {field.type === "select" && (

@@ -9,6 +9,12 @@ import { useI18n, type TKey } from "@/lib/i18n";
 import { richTextToPlain } from "@/lib/utils";
 import { SingleOptionInput, MultiOptionInput } from "@/components/ui/flexible-fields";
 import { ensureStringArray, mergeFlexibleOptions } from "@/lib/flexible-options";
+import dynamic from "next/dynamic";
+
+const RichEditor = dynamic(
+  () => import("@/components/blocks/rich-editor").then(m => m.RichEditor),
+  { ssr: false, loading: () => <div className="h-48 animate-pulse rounded-2xl bg-muted/30" /> },
+);
 
 type ProjectCategoryOption =
   | { key: string; labelKey: TKey }
@@ -29,7 +35,7 @@ const PROJECT_CREATE_KEYS = ["slug", "title", "description", "category", "tech_s
 interface FieldDef {
   key: string;
   label: string;
-  type: "text" | "textarea" | "select" | "checkbox" | "url_with_upload" | "single_option" | "multi_option";
+  type: "text" | "textarea" | "select" | "checkbox" | "url_with_upload" | "single_option" | "multi_option" | "rich_editor";
   options?: string[];
 }
 
@@ -38,7 +44,7 @@ function projectFields(t: (k: TKey) => string, categoryOptions: string[], techSt
     { key: "title", label: t("admin.fTitle"), type: "text" },
     { key: "slug", label: t("admin.fSlug"), type: "text" },
     { key: "category", label: t("admin.fCategory"), type: "single_option", options: categoryOptions },
-    { key: "description", label: t("admin.fDescription"), type: "textarea" },
+    { key: "description", label: t("admin.fDescription"), type: "rich_editor" },
     { key: "tech_stack", label: t("admin.fTechStack"), type: "multi_option", options: techStackOptions },
     { key: "cover_url", label: t("admin.fCoverUrl"), type: "url_with_upload" },
     { key: "repo_url", label: t("admin.fRepoUrl"), type: "text" },
@@ -171,7 +177,7 @@ function ProjectEditSheet({
             const previewUrl = typeof rawValue === "string" ? rawValue.trim() : "";
 
             return (
-              <div key={field.key} className={field.type === "textarea" || field.type === "url_with_upload" ? "sm:col-span-2" : ""}>
+              <div key={field.key} className={field.type === "textarea" || field.type === "url_with_upload" || field.type === "rich_editor" ? "sm:col-span-2" : ""}>
                 <label className="mb-1 block text-xs font-medium text-muted-foreground">{field.label}</label>
 
                 {field.type === "text" && (
@@ -207,6 +213,15 @@ function ProjectEditSheet({
                     onChange={(e) => set(field.key, e.target.value)}
                     rows={4}
                     className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:border-accent focus:outline-none"
+                  />
+                )}
+
+                {field.type === "rich_editor" && (
+                  <RichEditor
+                    initialContent={stringValue}
+                    token={token}
+                    onChange={(json) => set(field.key, json)}
+                    placeholder={field.label}
                   />
                 )}
 
