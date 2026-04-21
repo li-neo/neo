@@ -339,7 +339,7 @@ def list_sessions(
             func.count(ChatMessage.id).label("msg_count"),
             func.min(ChatMessage.created_at).label("started_at"),
             func.max(ChatMessage.created_at).label("last_at"),
-            ChatMessage.visitor_id,
+            func.max(ChatMessage.visitor_id).label("visitor_id"),
             func.max(ChatMessage.ip_address).label("ip_address"),
             func.max(ChatMessage.user_agent).label("user_agent"),
         )
