@@ -11,7 +11,7 @@ PROJECT_DIR="${NEO_PROJECT_DIR:-/opt/neo}"
 ENV_FILE="${PROJECT_DIR}/.env"
 LOG_FILE="/tmp/neo-deploy-$(date +%Y%m%d-%H%M%S).log"
 
-HEALTH_URL="http://127.0.0.1:8000/api/v1/health"
+HEALTH_URL="http://127.0.0.1:8000/health"
 HEALTH_RETRIES=10
 HEALTH_INTERVAL=3
 
