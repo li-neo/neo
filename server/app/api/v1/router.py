@@ -3,6 +3,12 @@ from app.api.v1 import auth, projects, posts, skills, guestbook, workspace, inte
 
 api_router = APIRouter()
 
+
+@api_router.get("/health", tags=["Health"])
+def health():
+    return {"status": "ok", "version": "0.1.0"}
+
+
 api_router.include_router(auth.router, prefix="/auth", tags=["Auth"])
 api_router.include_router(projects.router, prefix="/projects", tags=["Projects"])
 api_router.include_router(posts.router, prefix="/posts", tags=["Posts"])

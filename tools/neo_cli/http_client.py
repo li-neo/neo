@@ -23,11 +23,12 @@ class NeoApiClient:
 
     def _url(self, path: str) -> str:
         normalized = path if path.startswith("/") else f"/{path}"
-        if normalized == "/health" or normalized.startswith("/api/"):
-            return f"{self.config.base_url.rstrip('/')}{normalized}"
+        base = self.config.base_url.rstrip("/")
+        if normalized.startswith("/api/"):
+            return f"{base}{normalized}"
         if normalized.startswith(self.config.api_prefix):
-            return f"{self.config.base_url.rstrip('/')}{normalized}"
-        return f"{self.config.base_url.rstrip('/')}{self.config.api_prefix}{normalized}"
+            return f"{base}{normalized}"
+        return f"{base}{self.config.api_prefix}{normalized}"
 
     def _headers(self, auth: bool, extra: dict[str, str] | None = None) -> dict[str, str]:
         headers = {"Accept": "application/json"}
