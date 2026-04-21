@@ -26,6 +26,7 @@ neo/
 | Deploy        | Bare-metal (systemd) on Volcengine ECS                           |
 | Reverse Proxy | Nginx                                                            |
 
+
 ---
 
 ## Table of Contents
@@ -35,11 +36,10 @@ neo/
 3. [Admin Dashboard](#3-admin-dashboard)
 4. [Database](#4-database)
 5. [API Reference](#5-api-reference)
-6. [Production Deployment](#6-production-deployment)
-7. [CI/CD Auto-Deploy](#7-cicd-auto-deploy)
-8. [Domain & HTTPS](#8-domain--https)
-9. [Maintenance](#9-maintenance)
-10. [Troubleshooting](#10-troubleshooting)
+6. [ECS 首次部署（完整指南）](#6-ecs-首次部署完整指南)
+7. [CI/CD 工作流](#7-cicd-工作流)
+8. [维护](#8-维护)
+9. [故障排查](#9-故障排查)
 
 ---
 
@@ -364,177 +364,240 @@ Interactive docs (dev only): http://localhost:8000/docs
 
 ---
 
-## 6. Production Deployment
+## 6. ECS 首次部署（完整指南）
 
-Bare-metal installation with systemd services (no Docker).
-
-### Architecture
+裸机部署，systemd 管理进程，无 Docker。
 
 ```
-Internet → Nginx (80/443) → ┬─ Next.js (3000)  Frontend
-                             └─ FastAPI (8000)  Backend → MySQL
+Internet → Nginx (80/443) → ┬─ Next.js (:3000)  前端
+                             └─ FastAPI (:8000)  后端 → MySQL
 ```
 
-### 6.1 Server Requirements
+### 6.1 服务器要求
 
-| Resource    | Minimum              | Recommended          |
-|-------------|----------------------|----------------------|
-| CPU         | 2 cores              | 4 cores              |
-| RAM         | 4 GB                 | 8 GB                 |
-| Disk        | 30 GB SSD            | 40 GB ESSD           |
-| OS          | CentOS Stream 9      | CentOS Stream 9      |
+| 资源 | 最低 | 推荐 |
+|------|------|------|
+| CPU | 2 核 | 4 核 |
+| 内存 | 4 GB | 8 GB |
+| 磁盘 | 30 GB SSD | 40 GB ESSD |
+| 系统 | CentOS Stream 9 | CentOS Stream 9 |
 
-### 6.2 One-Click Setup
+### 6.2 Step 1 — 安装
 
-SSH into your ECS instance:
+通过火山引擎控制台 VNC（或 SSH）登录 ECS：
 
 ```bash
 git clone https://ghfast.top/https://github.com/li-neo/neo.git /opt/neo
 cd /opt/neo && bash infra/scripts/setup-ecs.sh
 ```
 
-The script automatically installs Python 3.12, Node.js 22, MySQL 8, Nginx; builds the frontend; creates systemd services (`neo-server`, `neo-web`); runs migrations; starts everything.
+脚本自动完成：Python 3.12、Node.js 22、MySQL 8、Nginx 安装 → 后端/前端依赖 → 构建 → systemd 服务 → 数据库迁移 → 启动。
 
-### 6.3 Verify
+完成后记录输出的 **MySQL 密码**。
 
-```bash
-systemctl status neo-server neo-web nginx mysqld
-curl http://localhost/api/v1/projects
-curl -sI http://localhost | head -5
-```
+### 6.3 Step 2 — 配置 GitHub OAuth
 
----
+1. 访问 https://github.com/settings/developers → **New OAuth App**
+2. 填写：
 
-## 7. CI/CD Auto-Deploy
+| 字段 | 值 |
+|------|----|
+| Application name | `Neo` |
+| Homepage URL | `https://li-neo.top` |
+| Authorization callback URL | `https://li-neo.top/api/v1/auth/github/callback` |
 
-Push to `main` triggers automatic deployment to your ECS instance.
-
-### 7.1 Flow
-
-```
-Local Dev → git push main → GitHub Actions → SSH to ECS → auto-deploy.sh
-                                  │
-                            ┌─────┴─────┐
-                            │  test job  │  Lint + Build verification
-                            └─────┬─────┘
-                                  │ Pass
-                            ┌─────┴─────┐
-                            │ deploy job │  SSH → git pull → build → migrate → restart
-                            └───────────┘
-```
-
-### 7.2 GitHub Secrets
-
-Configure in **GitHub repo → Settings → Secrets and variables → Actions**:
-
-| Secret             | Description                     | Example           |
-|--------------------|---------------------------------|-------------------|
-| `DEPLOY_HOST`      | ECS public IP                   | `101.96.207.11`   |
-| `DEPLOY_USER`      | SSH username                    | `root`            |
-| `SSH_PRIVATE_KEY`  | SSH private key (full content)  | `-----BEGIN...`   |
-
-### 7.3 Using `neo deploy`
-
-The fastest way to deploy:
+3. 创建后获得 **Client ID** 和 **Client Secret**
+4. 编辑 ECS 上的配置：
 
 ```bash
-# Make changes, then:
-neo deploy -m "feat: new feature"
+vim /opt/neo/.env
 ```
 
-This runs `git add -A && git commit && git push origin main`, then prints the GitHub Actions URL for tracking.
-
-For emergencies (bypass CI):
-
-```bash
-neo deploy --direct
-```
-
-This SSHs directly to ECS and runs `auto-deploy.sh`.
-
-### 7.4 Auto-Deploy Script
-
-The ECS-side script (`infra/scripts/auto-deploy.sh`) performs:
-
-1. **Save current revision** (for rollback)
-2. **git pull** latest code
-3. **uv sync** — install Python dependencies
-4. **pnpm install && pnpm build** — build frontend (standalone mode)
-5. **alembic upgrade head** — run database migrations
-6. **systemctl restart** — restart `neo-server` and `neo-web`
-7. **Health check** — verify backend responds on `/api/v1/health`
-8. **Auto-rollback** — if any step fails, reverts to previous commit
-
-### 7.5 Manual Deploy (Backup)
-
-If GitHub Actions is unavailable:
-
-```bash
-# From local machine (requires DEPLOY_HOST in .env)
-bash infra/scripts/deploy.sh
-```
-
----
-
-## 8. Domain & HTTPS
-
-### 8.1 DNS
-
-Add A records for `@` and `www` pointing to your server IP.
-
-### 8.2 SSL (Let's Encrypt)
-
-```bash
-dnf install -y certbot python3-certbot-nginx
-certbot --nginx -d your-domain.com -d www.your-domain.com \
-  --non-interactive --agree-tos -m your-email@example.com
-echo "0 3 * * * certbot renew --quiet" | crontab -
-```
-
-Then update `.env`:
+修改以下字段：
 
 ```env
-CORS_ORIGINS=["https://your-domain.com","https://www.your-domain.com"]
-GITHUB_REDIRECT_URI=https://your-domain.com/admin
+GITHUB_CLIENT_ID=你的Client-ID
+GITHUB_CLIENT_SECRET=你的Client-Secret
+GITHUB_REDIRECT_URI=https://li-neo.top/api/v1/auth/github/callback
+ADMIN_GITHUB_USERS=你的GitHub用户名或邮箱
 ```
 
 ```bash
 systemctl restart neo-server
 ```
 
+### 6.4 Step 3 — 域名解析
+
+在域名注册商（或火山引擎云解析）添加 A 记录：
+
+| 主机记录 | 类型 | 值 |
+|---------|------|----|
+| `@` | A | ECS 公网 IP |
+| `www` | A | ECS 公网 IP |
+
+验证解析生效（可能需要几分钟）：
+
+```bash
+ping li-neo.top
+```
+
+### 6.5 Step 4 — HTTPS 证书
+
+```bash
+dnf install -y certbot python3-certbot-nginx
+certbot --nginx -d li-neo.top -d www.li-neo.top \
+  --non-interactive --agree-tos -m 你的邮箱@example.com
+```
+
+certbot 会自动修改 Nginx 配置，添加 443 监听和证书路径。设置自动续期：
+
+```bash
+echo "0 3 * * * certbot renew --quiet" | crontab -
+```
+
+### 6.6 Step 5 — 验证
+
+```bash
+# 服务状态
+systemctl status neo-server neo-web nginx mysqld
+
+# API 测试
+curl https://li-neo.top/api/v1/projects
+
+# 首页
+curl -sI https://li-neo.top | head -5
+```
+
+浏览器访问：
+
+| 页面 | URL |
+|------|-----|
+| 首页 | https://li-neo.top |
+| 管理后台 | https://li-neo.top/admin → 点击 GitHub 登录 |
+| API 文档 | 仅开发模式可用 (DEBUG=true) |
+
+### 6.7 Step 6 — 配置 CI/CD 自动部署
+
+完成首次部署后，配置自动更新，让后续每次 `git push main` 自动部署到 ECS。
+
+**a) 添加部署公钥到 ECS**
+
+在本地生成密钥对（如果已有可跳过）：
+
+```bash
+ssh-keygen -t ed25519 -C "neo-deploy" -f ~/.ssh/neo_deploy -N ""
+```
+
+在 ECS 上添加公钥：
+
+```bash
+mkdir -p ~/.ssh && chmod 700 ~/.ssh
+echo "你的公钥内容" >> ~/.ssh/authorized_keys
+chmod 600 ~/.ssh/authorized_keys
+```
+
+**b) 配置 GitHub Secrets**
+
+进入 https://github.com/li-neo/neo/settings/secrets/actions ，添加：
+
+| Secret | 值 |
+|--------|----|
+| `DEPLOY_HOST` | ECS 公网 IP |
+| `DEPLOY_USER` | `root` |
+| `SSH_PRIVATE_KEY` | `~/.ssh/neo_deploy` 私钥完整内容 |
+
+或用 `gh` CLI 一键配置：
+
+```bash
+gh secret set SSH_PRIVATE_KEY < ~/.ssh/neo_deploy
+gh secret set DEPLOY_HOST --body "你的ECS-IP"
+gh secret set DEPLOY_USER --body "root"
+```
+
+**c) 测试自动部署**
+
+```bash
+neo deploy -m "test: verify CI/CD pipeline"
+```
+
+在 https://github.com/li-neo/neo/actions 查看流水线执行情况。
+
 ---
 
-## 9. Maintenance
+## 7. CI/CD 工作流
 
-### Update
+### 7.1 自动部署流程
 
-Recommended — use the CI/CD pipeline:
+```
+neo deploy -m "msg" → git push main → GitHub Actions
+                                          │
+                                    ┌─────┴─────┐
+                                    │  test job  │  lint + build 验证
+                                    └─────┬─────┘
+                                          │ 通过
+                                    ┌─────┴─────┐
+                                    │ deploy job │  SSH → auto-deploy.sh
+                                    └───────────┘
+                                          │
+                              git pull → build → migrate → restart → 健康检查
+```
+
+### 7.2 `neo deploy` 命令
+
+```bash
+neo deploy -m "feat: new feature"     # 提交 + 推送 + Actions 自动部署
+neo deploy --direct                   # 紧急: 跳过 CI，直接 SSH 部署
+neo deploy --skip-push                # 不提交，仅显示 Actions URL
+```
+
+### 7.3 ECS 端自动部署脚本
+
+`infra/scripts/auto-deploy.sh` 被 GitHub Actions SSH 调用，执行：
+
+1. 记录当前版本（用于回滚）
+2. `git pull` 拉取最新代码
+3. `pip install` 安装后端依赖
+4. `pnpm install && pnpm build` 构建前端（standalone 模式）
+5. `alembic upgrade head` 数据库迁移
+6. `systemctl restart` 重启 neo-server、neo-web
+7. 健康检查 `/api/v1/health`
+8. 任意步骤失败 → 自动回滚到上一个 commit
+
+### 7.4 手动部署（备用）
+
+```bash
+# 本地 SSH 触发（需要 .env 中配置 DEPLOY_HOST）
+bash infra/scripts/deploy.sh
+
+# 或直接在 ECS 上执行
+cd /opt/neo && bash infra/scripts/auto-deploy.sh
+```
+
+---
+
+## 8. 维护
+
+### 日常更新
 
 ```bash
 neo deploy -m "update description"
 ```
 
-Or on the ECS server directly:
+### 查看日志
 
 ```bash
-cd /opt/neo && bash infra/scripts/auto-deploy.sh
+journalctl -u neo-server -f      # 后端实时日志
+journalctl -u neo-web -f         # 前端实时日志
 ```
 
-### Logs
-
-```bash
-journalctl -u neo-server -f
-journalctl -u neo-web -f
-```
-
-### Database Backup
+### 数据库备份 / 恢复
 
 ```bash
 mysqldump -u neo -p neo > backup_$(date +%Y%m%d).sql
 mysql -u neo -p neo < backup.sql
 ```
 
-### Restart
+### 重启服务
 
 ```bash
 systemctl restart neo-server neo-web nginx mysqld
@@ -542,44 +605,42 @@ systemctl restart neo-server neo-web nginx mysqld
 
 ---
 
-## 10. Troubleshooting
+## 9. 故障排查
 
-### Service won't start (production)
+### 服务无法启动
 
 ```bash
 journalctl -u neo-server -n 50
 journalctl -u neo-web -n 50
 ```
 
-### Port conflict (local dev)
+### 端口冲突（本地开发）
 
 ```bash
 neo stop
-# or manually:
-lsof -ti:8000 | xargs kill -9
-lsof -ti:3000 | xargs kill -9
 ```
 
-### Database connection error
+### 数据库连接失败
 
 ```bash
 systemctl status mysqld
 mysql -u neo -p neo -e "SELECT 1"
 ```
 
-### GitHub OAuth redirect error
+### GitHub OAuth 回调错误
 
-Ensure callback URL matches in both GitHub OAuth App settings and `.env`:
-- Dev: `http://localhost:3000/admin`
-- Prod: `https://your-domain.com/admin`
+确认 GitHub OAuth App 设置和 `.env` 中的回调地址一致：
+- 本地开发: `http://localhost:8000/api/v1/auth/github/callback`
+- 生产环境: `https://li-neo.top/api/v1/auth/github/callback`
 
-### AI Chat not working
+### AI Chat 不工作
 
 ```bash
-curl http://127.0.0.1:18789/v1/models    # Verify OpenClaw is running
+curl http://127.0.0.1:18789/v1/models
 ```
 
-`.env` settings:
+检查 `.env`：
+
 ```env
 OPENCLAW_API_URL=http://127.0.0.1:18789
 OPENCLAW_API_KEY=your-key

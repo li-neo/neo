@@ -72,7 +72,7 @@ if [ -f "$ENV_FILE" ]; then
 fi
 
 pnpm install --frozen-lockfile 2>&1 | tee -a "$LOG_FILE"
-NEXT_PUBLIC_API_URL="$NEXT_PUBLIC_API_URL" NEXT_PUBLIC_SITE_URL="$NEXT_PUBLIC_SITE_URL" pnpm build 2>&1 | tee -a "$LOG_FILE"
+NEXT_PUBLIC_API_URL="$NEXT_PUBLIC_API_URL" NEXT_PUBLIC_SITE_URL="$NEXT_PUBLIC_SITE_URL" INTERNAL_API_URL="http://127.0.0.1:8000" pnpm build 2>&1 | tee -a "$LOG_FILE"
 
 # standalone 模式需要复制 static 和 public 资源
 if [ -d ".next/standalone" ]; then
