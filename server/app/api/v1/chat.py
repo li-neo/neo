@@ -158,7 +158,6 @@ async def chat_send(
 
     req_headers: dict[str, str] = {
         "Content-Type": "application/json",
-        "x-openclaw-agent-id": "neo-web",
     }
     if settings.openclaw_api_key:
         req_headers["Authorization"] = f"Bearer {settings.openclaw_api_key}"
