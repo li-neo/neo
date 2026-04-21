@@ -23,6 +23,9 @@ const RichViewerLazy = dynamic(
   { ssr: false, loading: () => <div className="h-32 animate-pulse rounded-2xl bg-muted/30" /> },
 );
 
+const PLATFORM_OPTIONS = ["openclaw", "mcp", "other"] as const;
+const STATUS_OPTIONS = ["published", "draft", "archived"] as const;
+
 function isBlockNoteJson(s: string | null | undefined): boolean {
   if (!s) return false;
   const t = s.trim();
@@ -191,8 +194,10 @@ export default function SkillDetailPage() {
                   </span>
                   <span className="rounded-full bg-muted/50 px-3 py-1 text-xs font-medium text-muted-foreground">
                     {editing
-                      ? <input value={draft?.platform ?? ""} onChange={e => d("platform", e.target.value)}
-                          className="w-16 bg-transparent outline-none" />
+                      ? <select value={draft?.platform ?? ""} onChange={e => d("platform", e.target.value)}
+                          className="bg-transparent outline-none text-xs">
+                          {PLATFORM_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
+                        </select>
                       : platform}
                   </span>
                   {status !== "published" && (
@@ -297,7 +302,6 @@ export default function SkillDetailPage() {
                       {[
                         { label: "Slug", key: "slug" as const },
                         { label: zh ? "源码 URL" : "Source URL", key: "source_url" as const },
-                        { label: zh ? "状态" : "Status", key: "status" as const },
                       ].map(f => (
                         <div key={f.key}>
                           <p className="mb-1 text-[10px] font-medium uppercase tracking-widest text-muted-foreground/70">{f.label}</p>
@@ -305,6 +309,13 @@ export default function SkillDetailPage() {
                             className="w-full rounded-xl border border-border/50 bg-background px-3 py-2 text-sm outline-none focus:border-accent/50" />
                         </div>
                       ))}
+                      <div>
+                        <p className="mb-1 text-[10px] font-medium uppercase tracking-widest text-muted-foreground/70">{zh ? "状态" : "Status"}</p>
+                        <select value={draft?.status ?? "published"} onChange={e => d("status", e.target.value)}
+                          className="w-full rounded-xl border border-border/50 bg-background px-3 py-2 text-sm outline-none focus:border-accent/50">
+                          {STATUS_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
+                        </select>
+                      </div>
                     </div>
                   </div>
                 ) : (

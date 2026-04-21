@@ -9,6 +9,7 @@ import { useI18n, type TKey } from "@/lib/i18n";
 import { richTextToPlain } from "@/lib/utils";
 import { SingleOptionInput, MultiOptionInput } from "@/components/ui/flexible-fields";
 import { ensureStringArray, mergeFlexibleOptions } from "@/lib/flexible-options";
+import { compressImage } from "@/lib/image-upload";
 import dynamic from "next/dynamic";
 
 const RichEditor = dynamic(
@@ -68,48 +69,6 @@ function pickKeys<T extends Record<string, unknown>>(data: T, keys: readonly str
     out[key] = value;
   }
   return out as Partial<T>;
-}
-
-function compressImage(file: File, maxW = 1600, quality = 0.85): Promise<File> {
-  return new Promise((resolve) => {
-    if (!file.type.startsWith("image/") || file.type === "image/svg+xml" || file.type === "image/gif") {
-      resolve(file);
-      return;
-    }
-    const img = new Image();
-    const url = URL.createObjectURL(file);
-    img.onload = () => {
-      URL.revokeObjectURL(url);
-      let { width: w, height: h } = img;
-      if (w <= maxW) {
-        resolve(file);
-        return;
-      }
-      const ratio = maxW / w;
-      w = maxW;
-      h = Math.round(h * ratio);
-      const canvas = document.createElement("canvas");
-      canvas.width = w;
-      canvas.height = h;
-      canvas.getContext("2d")!.drawImage(img, 0, 0, w, h);
-      canvas.toBlob(
-        (blob) => {
-          if (!blob || blob.size >= file.size) {
-            resolve(file);
-            return;
-          }
-          resolve(new File([blob], file.name.replace(/\.[^.]+$/, ".webp"), { type: "image/webp" }));
-        },
-        "image/webp",
-        quality,
-      );
-    };
-    img.onerror = () => {
-      URL.revokeObjectURL(url);
-      resolve(file);
-    };
-    img.src = url;
-  });
 }
 
 function ProjectEditSheet({

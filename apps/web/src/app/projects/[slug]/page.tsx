@@ -1,9 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft, ArrowUpRight, ExternalLink, FolderKanban, GitBranch, Globe, Pencil, Save, X } from "lucide-react";
+import { ArrowLeft, ArrowUpRight, ExternalLink, FolderKanban, GitBranch, Globe, Pencil, Save, Upload, X } from "lucide-react";
 import dynamic from "next/dynamic";
 
 import { Navbar } from "@/components/layout/navbar";
@@ -13,6 +13,7 @@ import { useAdminSession } from "@/hooks/use-admin-session";
 import { api, type Project } from "@/lib/api";
 import { richTextToPlain } from "@/lib/utils";
 import { dateLocale, useI18n } from "@/lib/i18n";
+import { uploadImage } from "@/lib/image-upload";
 
 const RichEditor = dynamic(
   () => import("@/components/blocks/rich-editor").then(m => m.RichEditor),
@@ -62,6 +63,8 @@ type Draft = {
 };
 
 const LINK_ICONS: Record<string, typeof Globe> = { GitHub: GitBranch, Demo: Globe, HuggingFace: ExternalLink };
+const PROJECT_CATEGORIES = ["llm", "vla", "multimodal", "world_model", "tool"] as const;
+const STATUS_OPTIONS = ["published", "draft", "archived"] as const;
 
 export default function ProjectDetailPage() {
   const params = useParams<{ slug: string }>();
@@ -74,6 +77,8 @@ export default function ProjectDetailPage() {
   const [state, setState] = useState<DetailState>("loading");
   const [draft, setDraft] = useState<Draft | null>(null);
   const [saving, setSaving] = useState(false);
+  const [uploadingCover, setUploadingCover] = useState(false);
+  const coverFileRef = useRef<HTMLInputElement>(null);
   const editing = Boolean(draft);
 
   useEffect(() => {
@@ -155,6 +160,14 @@ export default function ProjectDetailPage() {
   const d = (k: keyof Draft, v: string | boolean) =>
     setDraft(prev => prev ? { ...prev, [k]: v } : prev);
 
+  const handleCoverUpload = async (file: File) => {
+    if (!token) return;
+    setUploadingCover(true);
+    const url = await uploadImage(token, file);
+    if (url) d("cover_url", url);
+    setUploadingCover(false);
+  };
+
   return (
     <>
       <Navbar />
@@ -224,8 +237,10 @@ export default function ProjectDetailPage() {
                     <span className="inline-flex items-center gap-1.5 rounded-full bg-accent/10 px-3.5 py-1.5 text-[11px] font-bold uppercase tracking-wider text-accent">
                       <FolderKanban className="h-3 w-3" />
                       {editing
-                        ? <input value={draft?.category ?? ""} onChange={e => d("category", e.target.value)}
-                            className="w-24 bg-transparent text-accent outline-none" />
+                        ? <select value={draft?.category ?? ""} onChange={e => d("category", e.target.value)}
+                            className="bg-transparent text-accent outline-none text-[11px] font-bold uppercase">
+                            {PROJECT_CATEGORIES.map(c => <option key={c} value={c}>{c.toUpperCase()}</option>)}
+                          </select>
                         : category}
                     </span>
                     {(draft?.featured ?? p.featured) && (
@@ -302,11 +317,27 @@ export default function ProjectDetailPage() {
                 {/* Cover edit (admin) */}
                 {editing && (
                   <div className="rounded-2xl border border-dashed border-border/50 bg-muted/10 p-5">
-                    <label className="mb-2 block text-xs font-semibold uppercase tracking-wider text-muted-foreground/60">{zh ? "封面图 URL" : "Cover Image URL"}</label>
-                    <input value={draft?.cover_url ?? ""} onChange={e => d("cover_url", e.target.value)}
-                      placeholder="https://..."
-                      className="w-full rounded-xl border border-border/50 bg-background px-3 py-2 text-sm outline-none focus:border-accent/50" />
-                    {cover && <img src={cover} alt="" className="mt-3 max-h-48 rounded-xl object-cover" />}
+                    <label className="mb-2 block text-xs font-semibold uppercase tracking-wider text-muted-foreground/60">{zh ? "封面图" : "Cover Image"}</label>
+                    <div className="flex gap-2">
+                      <input value={draft?.cover_url ?? ""} onChange={e => d("cover_url", e.target.value)}
+                        placeholder="https://... or upload"
+                        className="flex-1 rounded-xl border border-border/50 bg-background px-3 py-2 text-sm outline-none focus:border-accent/50" />
+                      <button type="button" disabled={uploadingCover}
+                        onClick={() => coverFileRef.current?.click()}
+                        className="inline-flex shrink-0 items-center gap-1.5 rounded-xl border border-accent/40 bg-accent/10 px-3 py-2 text-xs font-medium text-accent hover:bg-accent/20 disabled:opacity-50">
+                        <Upload className="h-3.5 w-3.5" />
+                        {uploadingCover ? (zh ? "上传中..." : "Uploading...") : (zh ? "上传" : "Upload")}
+                      </button>
+                      <input ref={coverFileRef} type="file" accept="image/*" className="hidden"
+                        onChange={async (e) => { const f = e.target.files?.[0]; if (f) await handleCoverUpload(f); e.target.value = ""; }} />
+                    </div>
+                    {cover && (
+                      <div className="mt-3 flex items-center gap-3 rounded-xl bg-muted/30 p-2">
+                        <img src={cover} alt="" className="h-16 w-24 rounded-lg object-cover"
+                          onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
+                        <span className="truncate text-xs text-muted-foreground">{cover}</span>
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -341,7 +372,6 @@ export default function ProjectDetailPage() {
                         { label: "Repo URL", key: "repo_url" as const },
                         { label: "Demo URL", key: "demo_url" as const },
                         { label: "HuggingFace URL", key: "hf_url" as const },
-                        { label: zh ? "状态" : "Status", key: "status" as const },
                       ].map(f => (
                         <div key={f.key}>
                           <p className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/60">{f.label}</p>
@@ -349,6 +379,13 @@ export default function ProjectDetailPage() {
                             className="w-full rounded-xl border border-border/40 bg-background px-3 py-2 text-sm outline-none focus:border-accent/50" />
                         </div>
                       ))}
+                      <div>
+                        <p className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/60">{zh ? "状态" : "Status"}</p>
+                        <select value={draft?.status ?? "published"} onChange={e => d("status", e.target.value)}
+                          className="w-full rounded-xl border border-border/40 bg-background px-3 py-2 text-sm outline-none focus:border-accent/50">
+                          {STATUS_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
+                        </select>
+                      </div>
                       <label className="flex items-center gap-2 rounded-xl border border-border/40 bg-muted/20 px-3 py-2.5 transition-colors hover:bg-muted/30">
                         <input type="checkbox" checked={draft?.featured ?? false} onChange={e => d("featured", e.target.checked)}
                           className="h-4 w-4 rounded border-border accent-accent" />

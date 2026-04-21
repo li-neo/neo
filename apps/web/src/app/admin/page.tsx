@@ -9,6 +9,7 @@ import { MarkdownRenderer } from "@/components/blocks/markdown-renderer";
 import { embedPostSourceMeta, parsePostSourceMeta, sourceLabel } from "@/lib/post-content";
 import { SingleOptionInput, MultiOptionInput } from "@/components/ui/flexible-fields";
 import { ensureStringArray, mergeFlexibleOptions } from "@/lib/flexible-options";
+import { compressImage } from "@/lib/image-upload";
 import dynamic from "next/dynamic";
 
 const RichEditor = dynamic(
@@ -63,40 +64,6 @@ function Toast({ toast }: { toast: { msg: string; type: ToastType } | null }) {
       {toast.msg}
     </div>
   );
-}
-
-/* ─── image compress util ─── */
-function compressImage(file: File, maxW = 1600, quality = 0.85): Promise<File> {
-  return new Promise((resolve) => {
-    if (!file.type.startsWith("image/") || file.type === "image/svg+xml" || file.type === "image/gif") {
-      resolve(file);
-      return;
-    }
-    const img = new Image();
-    const url = URL.createObjectURL(file);
-    img.onload = () => {
-      URL.revokeObjectURL(url);
-      let { width: w, height: h } = img;
-      if (w <= maxW) { resolve(file); return; }
-      const ratio = maxW / w;
-      w = maxW;
-      h = Math.round(h * ratio);
-      const canvas = document.createElement("canvas");
-      canvas.width = w;
-      canvas.height = h;
-      canvas.getContext("2d")!.drawImage(img, 0, 0, w, h);
-      canvas.toBlob(
-        (blob) => {
-          if (!blob || blob.size >= file.size) { resolve(file); return; }
-          resolve(new File([blob], file.name.replace(/\.[^.]+$/, ".webp"), { type: "image/webp" }));
-        },
-        "image/webp",
-        quality,
-      );
-    };
-    img.onerror = () => { URL.revokeObjectURL(url); resolve(file); };
-    img.src = url;
-  });
 }
 
 /* ─── tabs ─── */
@@ -534,7 +501,7 @@ function SkillsPanel({ token, t, toast }: PanelProps) {
 }
 
 /* ─── Blog Panel ─── */
-const POST_CREATE_KEYS = ["slug", "title", "summary", "content", "tags", "cover_url", "published"] as const;
+const POST_CREATE_KEYS = ["slug", "title", "summary", "content", "tags", "cover_url", "reading_time", "published"] as const;
 
 function blogFields(t: (k: TKey) => string): FieldDef[] {
   return [
@@ -543,6 +510,7 @@ function blogFields(t: (k: TKey) => string): FieldDef[] {
     { key: "summary", label: t("admin.fSummary"), type: "textarea" },
     { key: "tags", label: t("admin.fTags"), type: "text" },
     { key: "cover_url", label: t("admin.fCoverUrl"), type: "url_with_upload" },
+    { key: "reading_time", label: t("admin.fReadingTime"), type: "text" },
     { key: "published", label: t("admin.fPublished"), type: "checkbox" },
     { key: "content", label: t("admin.fContent"), type: "rich_editor" },
   ];

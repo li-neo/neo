@@ -75,6 +75,7 @@ def build_resource_payload(args: argparse.Namespace, action: str) -> dict[str, A
             "status": getattr(args, "status", None),
         })
     elif getattr(args, "resource", None) == "posts":
+        reading_time = getattr(args, "reading_time", None)
         payload = merge_payload(payload, {
             "slug": getattr(args, "slug", None) if action == "create" else None,
             "title": getattr(args, "title", None),
@@ -82,6 +83,7 @@ def build_resource_payload(args: argparse.Namespace, action: str) -> dict[str, A
             "content": getattr(args, "content", None),
             "tags": split_csv(getattr(args, "tags", None)),
             "cover_url": getattr(args, "cover_url", None),
+            "reading_time": reading_time,
             "published": True if getattr(args, "published", False) else (False if getattr(args, "draft", False) else None),
         })
     elif getattr(args, "resource", None) == "guestbook":
@@ -786,6 +788,7 @@ def build_parser() -> argparse.ArgumentParser:
                 parser_obj.add_argument("--content")
                 parser_obj.add_argument("--tags")
                 parser_obj.add_argument("--cover-url")
+                parser_obj.add_argument("--reading-time", type=int)
                 parser_obj.add_argument("--published", action="store_true")
                 parser_obj.add_argument("--draft", action="store_true")
             rcreate.add_argument("--slug", required=True)
