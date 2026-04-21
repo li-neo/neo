@@ -48,6 +48,15 @@ upload_path.mkdir(parents=True, exist_ok=True)
 app.mount("/uploads", StaticFiles(directory=str(upload_path)), name="uploads")
 
 
+@app.middleware("http")
+async def upload_security_headers(request: Request, call_next):
+    response = await call_next(request)
+    if request.url.path.startswith("/uploads/"):
+        response.headers["Content-Security-Policy"] = "default-src 'none'"
+        response.headers["X-Content-Type-Options"] = "nosniff"
+    return response
+
+
 @app.get("/health")
 def health():
     return {"status": "ok", "version": "0.1.0"}

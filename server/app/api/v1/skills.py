@@ -35,8 +35,15 @@ def list_skills(
 
 
 @router.get("/{slug}")
-def get_skill(slug: str, db: Session = Depends(get_db)):
-    skill = db.query(Skill).filter(Skill.slug == slug).first()
+def get_skill(
+    slug: str,
+    current_user: User | None = Depends(get_optional_user),
+    db: Session = Depends(get_db),
+):
+    query = db.query(Skill).filter(Skill.slug == slug)
+    if not (current_user and current_user.role == UserRole.admin):
+        query = query.filter(Skill.status == "published")
+    skill = query.first()
     if not skill:
         return error(code=404, message="Skill not found")
     return success(data=_serialize(skill))

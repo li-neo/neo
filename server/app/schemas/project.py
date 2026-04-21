@@ -20,6 +20,7 @@ class ProjectCreate(BaseModel):
 
 
 class ProjectUpdate(BaseModel):
+    slug: str | None = None
     title: str | None = None
     description: str | None = None
     category: str | None = None

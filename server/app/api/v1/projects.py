@@ -35,8 +35,15 @@ def list_projects(
 
 
 @router.get("/{slug}")
-def get_project(slug: str, db: Session = Depends(get_db)):
-    project = db.query(Project).filter(Project.slug == slug).first()
+def get_project(
+    slug: str,
+    current_user: User | None = Depends(get_optional_user),
+    db: Session = Depends(get_db),
+):
+    query = db.query(Project).filter(Project.slug == slug)
+    if not (current_user and current_user.role == UserRole.admin):
+        query = query.filter(Project.status == "published")
+    project = query.first()
     if not project:
         return error(code=404, message="Project not found")
     return success(data=_serialize(project))

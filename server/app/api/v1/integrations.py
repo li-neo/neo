@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.core.security import get_current_user
+from app.core.security import get_admin_user
 from app.core.response import success, error
 from app.models.integration import Integration
 from app.models.user import User
@@ -17,7 +17,7 @@ router = APIRouter()
 
 
 @router.get("")
-def list_integrations(_: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def list_integrations(_: User = Depends(get_admin_user), db: Session = Depends(get_db)):
     items = db.query(Integration).all()
     return success(data=[
         {
@@ -30,7 +30,7 @@ def list_integrations(_: User = Depends(get_current_user), db: Session = Depends
 
 
 @router.post("/{name}/connect")
-def connect_integration(name: str, config: dict | None = None, _: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def connect_integration(name: str, config: dict | None = None, _: User = Depends(get_admin_user), db: Session = Depends(get_db)):
     integration = db.query(Integration).filter(Integration.name == name).first()
     if not integration:
         return error(code=404, message=f"Integration '{name}' not found")
@@ -43,7 +43,7 @@ def connect_integration(name: str, config: dict | None = None, _: User = Depends
 
 
 @router.post("/{name}/disconnect")
-def disconnect_integration(name: str, _: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def disconnect_integration(name: str, _: User = Depends(get_admin_user), db: Session = Depends(get_db)):
     integration = db.query(Integration).filter(Integration.name == name).first()
     if not integration:
         return error(code=404, message=f"Integration '{name}' not found")
@@ -54,7 +54,7 @@ def disconnect_integration(name: str, _: User = Depends(get_current_user), db: S
 
 
 @router.post("/{name}/sync")
-async def sync_integration(name: str, _: User = Depends(get_current_user), db: Session = Depends(get_db)):
+async def sync_integration(name: str, _: User = Depends(get_admin_user), db: Session = Depends(get_db)):
     """Trigger a sync for the given integration (pull repos, models, etc.)."""
     integration = db.query(Integration).filter(Integration.name == name).first()
     if not integration:

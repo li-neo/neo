@@ -68,6 +68,7 @@ def save_config(config: NeoCliConfig) -> None:
         try:
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+            os.chmod(path, 0o600)
             return
         except OSError:
             continue

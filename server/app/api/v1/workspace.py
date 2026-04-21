@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from datetime import datetime, timezone
 
 from app.core.database import get_db
-from app.core.security import get_current_user
+from app.core.security import get_admin_user
 from app.core.response import success, paginated, error
 from app.api.deps import pagination
 from app.models.task import Task
@@ -18,7 +18,7 @@ def list_tasks(
     type: str | None = None,
     status: str | None = None,
     pg: PaginationParams = Depends(pagination),
-    _: User = Depends(get_current_user),
+    _: User = Depends(get_admin_user),
     db: Session = Depends(get_db),
 ):
     query = db.query(Task)
@@ -36,7 +36,7 @@ def create_task(
     name: str,
     type: str,
     payload: dict | None = None,
-    _: User = Depends(get_current_user),
+    _: User = Depends(get_admin_user),
     db: Session = Depends(get_db),
 ):
     task = Task(name=name, type=type, payload=payload)
@@ -51,7 +51,7 @@ def update_task_status(
     task_id: int,
     status: str,
     result: dict | None = None,
-    _: User = Depends(get_current_user),
+    _: User = Depends(get_admin_user),
     db: Session = Depends(get_db),
 ):
     task = db.query(Task).filter(Task.id == task_id).first()
@@ -69,7 +69,7 @@ def update_task_status(
 
 
 @router.get("/stats")
-def workspace_stats(_: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def workspace_stats(_: User = Depends(get_admin_user), db: Session = Depends(get_db)):
     """Dashboard stats for workspace."""
     from app.models.project import Project
     from app.models.post import Post

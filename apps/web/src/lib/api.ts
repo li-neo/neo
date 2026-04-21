@@ -266,7 +266,12 @@ export const api = {
           headers: { Authorization: `Bearer ${token}` },
           body: form,
         });
-        return res.json();
+        const json = await res.json();
+        if (!res.ok) {
+          const detail = json.detail;
+          return { code: res.status, message: typeof detail === "string" ? detail : `Upload failed (${res.status})`, data: null };
+        }
+        return json;
       } catch {
         return { code: -1, message: "Upload failed", data: null };
       }

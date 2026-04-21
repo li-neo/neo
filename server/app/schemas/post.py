@@ -9,15 +9,18 @@ class PostCreate(BaseModel):
     content: str | None = None
     tags: list[str] | None = None
     cover_url: str | None = None
+    reading_time: int | None = None
     published: bool = False
 
 
 class PostUpdate(BaseModel):
     title: str | None = None
+    slug: str | None = None
     summary: str | None = None
     content: str | None = None
     tags: list[str] | None = None
     cover_url: str | None = None
+    reading_time: int | None = None
     published: bool | None = None
 
 

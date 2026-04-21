@@ -17,6 +17,7 @@ class SkillCreate(BaseModel):
 
 
 class SkillUpdate(BaseModel):
+    slug: str | None = None
     name: str | None = None
     description: str | None = None
     category: str | None = None

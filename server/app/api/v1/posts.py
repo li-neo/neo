@@ -52,8 +52,12 @@ def get_post(
 
 @router.post("")
 def create_post(body: PostCreate, _: User = Depends(get_admin_user), db: Session = Depends(get_db)):
-    post = Post(**body.model_dump())
-    if post.content:
+    data = body.model_dump(exclude_unset=True)
+    user_reading_time = data.pop("reading_time", None)
+    post = Post(**data)
+    if user_reading_time is not None and user_reading_time > 0:
+        post.reading_time = user_reading_time
+    elif post.content:
         post.reading_time = max(1, len(post.content) // 1000)
     db.add(post)
     db.commit()
@@ -92,9 +96,14 @@ def update_post(slug: str, body: PostUpdate, _: User = Depends(get_admin_user), 
     post = db.query(Post).filter(Post.slug == slug).first()
     if not post:
         return error(code=404, message="Post not found")
-    for key, val in body.model_dump(exclude_unset=True).items():
+    updates = body.model_dump(exclude_unset=True)
+    user_reading_time = updates.pop("reading_time", None)
+    content_changed = "content" in updates
+    for key, val in updates.items():
         setattr(post, key, val)
-    if post.content:
+    if user_reading_time is not None and user_reading_time > 0:
+        post.reading_time = user_reading_time
+    elif content_changed and post.content:
         post.reading_time = max(1, len(post.content) // 1000)
     db.commit()
     db.refresh(post)

@@ -108,7 +108,11 @@ def _mcp_get_skill(db, params):
 
 def _mcp_create_task(db, params):
     from app.models.task import Task
-    task = Task(name=params["name"], type=params["type"], payload=params.get("payload"))
+    name = params.get("name")
+    task_type = params.get("type")
+    if not name or not task_type:
+        return {"error": "Missing required params: name, type"}
+    task = Task(name=str(name)[:200], type=str(task_type)[:50], payload=params.get("payload"))
     db.add(task)
     db.commit()
     db.refresh(task)

@@ -91,9 +91,8 @@ async def github_callback(
             "client_id": settings.github_client_id,
             "client_secret": settings.github_client_secret,
             "code": code,
+            "redirect_uri": settings.github_redirect_uri,
         }
-        if redirect_uri:
-            payload["redirect_uri"] = redirect_uri
         token_resp = await client.post(
             "https://github.com/login/oauth/access_token",
             json=payload,

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import ipaddress
+import socket
 from io import BytesIO
 import re
 from typing import Any
@@ -13,6 +15,26 @@ from pypdf import PdfReader
 
 TITLE_MAX = 120
 SUMMARY_MAX = 160
+MAX_IMPORT_SIZE = 10 * 1024 * 1024  # 10MB
+
+
+def _is_safe_url(url: str) -> bool:
+    """Block SSRF: reject private, loopback, link-local, and metadata IPs."""
+    parsed = urlparse(url)
+    hostname = parsed.hostname
+    if not hostname:
+        return False
+    try:
+        for info in socket.getaddrinfo(hostname, None, socket.AF_UNSPEC, socket.SOCK_STREAM):
+            addr = info[4][0]
+            ip = ipaddress.ip_address(addr)
+            if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved:
+                return False
+            if str(ip) == "169.254.169.254":
+                return False
+    except socket.gaierror:
+        return False
+    return True
 
 
 def import_post_from_bytes(filename: str, data: bytes, content_type: str | None = None) -> dict[str, Any]:
@@ -37,13 +59,19 @@ def import_post_from_url(url: str) -> dict[str, Any]:
     if parsed.scheme not in {"http", "https"}:
         raise ValueError("Only http/https URLs are supported.")
 
+    if not _is_safe_url(url):
+        raise ValueError("URL points to a private or reserved network address.")
+
     headers = {
         "User-Agent": "NeoBlogImporter/1.0 (+https://li-neo.top)",
         "Accept": "text/html,application/pdf,text/markdown,text/plain;q=0.9,*/*;q=0.8",
     }
-    with httpx.Client(follow_redirects=True, timeout=20.0, headers=headers) as client:
+    with httpx.Client(follow_redirects=True, timeout=20.0, max_redirects=5, headers=headers) as client:
         response = client.get(url)
         response.raise_for_status()
+
+    if len(response.content) > MAX_IMPORT_SIZE:
+        raise ValueError(f"Response too large (>{MAX_IMPORT_SIZE // 1024 // 1024}MB).")
 
     content_type = response.headers.get("content-type", "").split(";")[0].strip().lower()
     disposition = response.headers.get("content-disposition", "")

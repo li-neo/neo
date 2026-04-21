@@ -1,16 +1,16 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from datetime import datetime
 from app.schemas.user import UserOut
 
 
 class GuestbookCreate(BaseModel):
-    message: str
-    nickname: str | None = None
+    message: str = Field(..., min_length=1, max_length=2000)
+    nickname: str | None = Field(None, max_length=50)
 
 
 class GuestbookUpdate(BaseModel):
-    message: str
-    nickname: str | None = None
+    message: str = Field(..., min_length=1, max_length=2000)
+    nickname: str | None = Field(None, max_length=50)
 
 
 class GuestbookOut(BaseModel):

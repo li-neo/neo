@@ -9,9 +9,9 @@ from app.core.response import success
 router = APIRouter()
 settings = get_settings()
 
-ALLOWED_IMAGE = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".svg"}
+ALLOWED_IMAGE = {".jpg", ".jpeg", ".png", ".gif", ".webp"}
 ALLOWED_VIDEO = {".mp4", ".webm", ".mov"}
-ALLOWED_DOC = {".pdf", ".md", ".markdown", ".txt", ".html"}
+ALLOWED_DOC = {".pdf", ".md", ".markdown", ".txt"}
 ALLOWED = ALLOWED_IMAGE | ALLOWED_VIDEO | ALLOWED_DOC
 
 
