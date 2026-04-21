@@ -940,8 +940,8 @@ function UploadsPanel({ token, t, toast }: PanelProps) {
 
 /* ─── Chat Sessions Panel ─── */
 function ChatSessionsPanel({ token, t }: PanelProps) {
-  const [sessions, setSessions] = useState<{ session_id: string; visitor_id: string; msg_count: number; started_at: string; last_at: string }[]>([]);
-  const [detail, setDetail] = useState<{ session_id: string; messages: { id: number; role: string; content: string; created_at: string }[] } | null>(null);
+  const [sessions, setSessions] = useState<{ session_id: string; visitor_id: string; msg_count: number; started_at: string; last_at: string; ip_address?: string; user_agent?: string }[]>([]);
+  const [detail, setDetail] = useState<{ session_id: string; messages: { id: number; role: string; content: string; created_at: string; ip_address?: string; user_agent?: string }[] } | null>(null);
 
   const load = useCallback(() => {
     api.admin.chat.sessions(token).then(r => setSessions(r.data ?? []));
@@ -972,7 +972,10 @@ function ChatSessionsPanel({ token, t }: PanelProps) {
                   : "bg-muted text-foreground"
               }`}>
                 <p className="whitespace-pre-wrap">{m.content}</p>
-                <p className="mt-1 text-[10px] opacity-50">{new Date(m.created_at).toLocaleString()}</p>
+                <p className="mt-1 text-[10px] opacity-50">
+                  {new Date(m.created_at).toLocaleString()}
+                  {m.role === "user" && m.ip_address ? ` · ${m.ip_address}` : ""}
+                </p>
               </div>
             </div>
           ))}
@@ -990,6 +993,7 @@ function ChatSessionsPanel({ token, t }: PanelProps) {
             <p className="text-xs text-muted-foreground">
               Visitor: {s.visitor_id?.slice(0, 8) ?? "—"} · {s.msg_count} {t("admin.chatMessages")} · {new Date(s.last_at).toLocaleString()}
             </p>
+            {s.ip_address && <p className="text-[10px] text-muted-foreground/70 mt-0.5">IP: {s.ip_address}{s.user_agent ? ` · ${s.user_agent.slice(0, 60)}…` : ""}</p>}
           </div>
           <button onClick={() => viewSession(s.session_id)}
             className="rounded-lg border px-3 py-1 text-xs hover:bg-muted">{t("admin.chatViewDetail")}</button>

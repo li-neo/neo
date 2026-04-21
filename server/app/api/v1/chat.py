@@ -102,8 +102,15 @@ class ChatRequest(BaseModel):
         return v[:MAX_USER_MSG_LEN]
 
 
+def _real_ip(request: Request) -> str:
+    forwarded = request.headers.get("x-forwarded-for", "")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
+
 def _visitor_id(request: Request) -> str:
-    ip = request.client.host if request.client else "unknown"
+    ip = _real_ip(request)
     ua = request.headers.get("user-agent", "")
     return hashlib.sha256(f"{ip}:{ua}".encode()).hexdigest()[:16]
 
@@ -126,9 +133,13 @@ async def chat_send(
     session_id = body.session_id or uuid.uuid4().hex[:16]
     visitor = _visitor_id(request)
 
+    real_ip = _real_ip(request)
+    user_agent = request.headers.get("user-agent", "")[:512]
+
     db.add(ChatMessage(
         session_id=session_id, role="user",
         content=user_text, visitor_id=visitor,
+        ip_address=real_ip, user_agent=user_agent,
     ))
     db.commit()
 
@@ -248,6 +259,8 @@ def list_sessions(
             func.min(ChatMessage.created_at).label("started_at"),
             func.max(ChatMessage.created_at).label("last_at"),
             ChatMessage.visitor_id,
+            func.max(ChatMessage.ip_address).label("ip_address"),
+            func.max(ChatMessage.user_agent).label("user_agent"),
         )
         .group_by(ChatMessage.session_id)
         .order_by(desc(func.max(ChatMessage.created_at)))
@@ -261,6 +274,8 @@ def list_sessions(
             "msg_count": r.msg_count,
             "started_at": str(r.started_at),
             "last_at": str(r.last_at),
+            "ip_address": r.ip_address,
+            "user_agent": r.user_agent,
         }
         for r in rows
     ]
@@ -280,6 +295,10 @@ def get_session_messages(
         .all()
     )
     return success(data=[
-        {"id": m.id, "role": m.role, "content": m.content, "created_at": str(m.created_at)}
+        {
+            "id": m.id, "role": m.role, "content": m.content,
+            "created_at": str(m.created_at),
+            "ip_address": m.ip_address, "user_agent": m.user_agent,
+        }
         for m in msgs
     ])

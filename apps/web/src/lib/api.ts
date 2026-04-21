@@ -240,11 +240,11 @@ export const api = {
     },
     chat: {
       sessions: (token: string, page = 1) =>
-        authReq<{ session_id: string; visitor_id: string; msg_count: number; started_at: string; last_at: string }[]>(
+        authReq<{ session_id: string; visitor_id: string; msg_count: number; started_at: string; last_at: string; ip_address?: string; user_agent?: string }[]>(
           `/chat/sessions?page=${page}`, token
         ),
       sessionMessages: (token: string, sessionId: string) =>
-        authReq<{ id: number; role: string; content: string; created_at: string }[]>(
+        authReq<{ id: number; role: string; content: string; created_at: string; ip_address?: string; user_agent?: string }[]>(
           `/chat/sessions/${sessionId}`, token
         ),
     },

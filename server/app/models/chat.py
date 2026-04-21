@@ -10,4 +10,6 @@ class ChatMessage(Base):
     role = Column(String(20), nullable=False)  # user / assistant
     content = Column(Text, nullable=False)
     visitor_id = Column(String(64), nullable=True, index=True)
+    ip_address = Column(String(45), nullable=True)
+    user_agent = Column(String(512), nullable=True)
     created_at = Column(DateTime, server_default=func.now(), nullable=False)

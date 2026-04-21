@@ -205,7 +205,13 @@ else
 cat > /etc/nginx/conf.d/neo.conf <<'NGEOF'
 upstream neo_web { server 127.0.0.1:3000; }
 upstream neo_api { server 127.0.0.1:8000; }
+
+# ── Rate limiting zones ──
+limit_req_zone $binary_remote_addr zone=global:10m rate=10r/s;
 limit_req_zone $binary_remote_addr zone=api:10m rate=30r/s;
+limit_req_zone $binary_remote_addr zone=chat:10m rate=5r/s;
+limit_req_zone $binary_remote_addr zone=auth:10m rate=3r/s;
+limit_conn_zone $binary_remote_addr zone=perip:10m;
 
 server {
     listen 80;
@@ -214,8 +220,43 @@ server {
     gzip on;
     gzip_types text/plain text/css application/json application/javascript text/xml;
 
+    # Global connection limit
+    limit_conn perip 50;
+
+    # Block common scanner user agents
+    if ($http_user_agent ~* (nmap|nikto|wikto|sf|sqlmap|bsqlbf|w3af|acunetix|havij|appscan)) {
+        return 403;
+    }
+
+    # Chat endpoint — strict rate limit
+    location /api/v1/chat/ {
+        limit_req zone=chat burst=10 nodelay;
+        limit_req_status 429;
+        proxy_pass http://neo_api;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 180s;
+        proxy_buffering off;
+        proxy_cache off;
+    }
+
+    # Auth endpoint — strict rate limit
+    location /api/v1/auth/ {
+        limit_req zone=auth burst=5 nodelay;
+        limit_req_status 429;
+        proxy_pass http://neo_api;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    # General API
     location /api/ {
         limit_req zone=api burst=20 nodelay;
+        limit_req_status 429;
         proxy_pass http://neo_api;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
@@ -231,6 +272,7 @@ server {
         add_header Cache-Control "public, immutable";
     }
     location / {
+        limit_req zone=global burst=30 nodelay;
         proxy_pass http://neo_web;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;

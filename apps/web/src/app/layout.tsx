@@ -7,6 +7,7 @@ export const metadata: Metadata = {
   title: "Neo — Personal Workspace & Portfolio",
   description:
     "A showcase of LLM, autonomous driving (VLA), multimodal, and world model projects, plus OpenClaw skills and automation tools.",
+  icons: { icon: "/icon.svg" },
   openGraph: {
     title: "Home",
     description: "Personal Workspace & Portfolio",
