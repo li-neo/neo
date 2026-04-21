@@ -143,9 +143,16 @@ MYSQL_PORT="$(read_env_value MYSQL_PORT "3306")"
 MYSQL_USER="$(read_env_value MYSQL_USER "neo")"
 MYSQL_DATABASE="$(read_env_value MYSQL_DATABASE "neo")"
 MYSQL_PW="$(read_env_value MYSQL_PASSWORD "")"
-[ -n "$MYSQL_PW" ] || MYSQL_PW=$(openssl rand -hex 16)
+if [ -z "$MYSQL_PW" ]; then
+    MYSQL_PW=$(openssl rand -hex 16)
+    warn "生成新 MySQL 密码（首次安装或 .env 缺失 MYSQL_PASSWORD）"
+fi
 
 if [ "$MYSQL_HOST" = "localhost" ] || [ "$MYSQL_HOST" = "127.0.0.1" ]; then
+    # 只在用户不存在或密码确实需要设置时才 ALTER USER，避免误改密码
+    if mysql -u "$MYSQL_USER" -p"$MYSQL_PW" -e "SELECT 1" "$MYSQL_DATABASE" &>/dev/null; then
+        ok "数据库 ${MYSQL_DATABASE} 连接验证通过，跳过用户初始化"
+    else
 mysql -u root <<SQLEOF
 CREATE DATABASE IF NOT EXISTS ${MYSQL_DATABASE} CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 CREATE USER IF NOT EXISTS '${MYSQL_USER}'@'localhost' IDENTIFIED BY '${MYSQL_PW}';
@@ -153,7 +160,8 @@ ALTER USER '${MYSQL_USER}'@'localhost' IDENTIFIED BY '${MYSQL_PW}';
 GRANT ALL PRIVILEGES ON ${MYSQL_DATABASE}.* TO '${MYSQL_USER}'@'localhost';
 FLUSH PRIVILEGES;
 SQLEOF
-    ok "数据库 ${MYSQL_DATABASE} 就绪"
+        ok "数据库 ${MYSQL_DATABASE} 初始化完成"
+    fi
 else
     warn "检测到 MYSQL_HOST=${MYSQL_HOST}，跳过本机 MySQL 用户初始化"
 fi
@@ -211,13 +219,10 @@ ok "前端构建完成"
 # ── 8. 生成配置 & systemd 服务 ──
 info "8/8 配置文件 & 服务"
 
-SECRET_KEY=$(openssl rand -hex 32)
-JWT_SECRET=$(openssl rand -hex 32)
-
-if [ -f "$ENV_FILE" ]; then
-    SECRET_KEY="$(read_env_value SECRET_KEY "$SECRET_KEY")"
-    JWT_SECRET="$(read_env_value JWT_SECRET_KEY "$JWT_SECRET")"
-fi
+SECRET_KEY="$(read_env_value SECRET_KEY "")"
+JWT_SECRET="$(read_env_value JWT_SECRET_KEY "")"
+[ -n "$SECRET_KEY" ] || SECRET_KEY=$(openssl rand -hex 32)
+[ -n "$JWT_SECRET" ] || JWT_SECRET=$(openssl rand -hex 32)
 
 # — .env —
 if [ -f "$ENV_FILE" ]; then
@@ -266,8 +271,10 @@ ok ".env 已生成（密钥自动随机）"
 fi
 
 # — Nginx —
-# 先删掉默认 server 块，避免端口冲突
 rm -f /etc/nginx/conf.d/default.conf
+if [ -f /etc/nginx/conf.d/neo.conf ] && grep -q "ssl_certificate" /etc/nginx/conf.d/neo.conf 2>/dev/null; then
+    ok "Nginx 配置已含 SSL（certbot），跳过覆盖"
+else
 cat > /etc/nginx/conf.d/neo.conf <<NGEOF
 upstream neo_web { server 127.0.0.1:3000; }
 upstream neo_api { server 127.0.0.1:8000; }
@@ -313,6 +320,7 @@ server {
 }
 NGEOF
 ok "Nginx 配置就绪"
+fi
 
 # — systemd: neo-server —
 cat > /etc/systemd/system/neo-server.service << SVCEOF

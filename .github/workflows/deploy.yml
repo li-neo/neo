@@ -59,10 +59,20 @@ jobs:
           host: ${{ secrets.DEPLOY_HOST }}
           username: ${{ secrets.DEPLOY_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
+          command_timeout: 10m
           script: |
+            set -euo pipefail
             cd /opt/neo
-            git pull origin main
-            docker compose build
-            docker compose up -d
-            docker compose exec -T server uv run alembic upgrade head
-            echo "Deployment complete at $(date)"
+            bash infra/scripts/auto-deploy.sh 2>&1
+
+      - name: Deployment summary
+        if: always()
+        run: |
+          if [ "${{ job.status }}" = "success" ]; then
+            echo "### Deployment Successful" >> $GITHUB_STEP_SUMMARY
+            echo "Deployed commit \`${{ github.sha }}\` to production." >> $GITHUB_STEP_SUMMARY
+          else
+            echo "### Deployment Failed" >> $GITHUB_STEP_SUMMARY
+            echo "Failed to deploy commit \`${{ github.sha }}\`." >> $GITHUB_STEP_SUMMARY
+            echo "Check the SSH step logs above for details." >> $GITHUB_STEP_SUMMARY
+          fi

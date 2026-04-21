@@ -445,16 +445,26 @@ def handle_system(args: argparse.Namespace, config: NeoCliConfig, client: NeoApi
     raise ValueError(f"Unsupported system command: {args.system_cmd}")
 
 
+def handle_dev(args: argparse.Namespace, config: NeoCliConfig) -> int:
+    root = project_root(config)
+    service = getattr(args, "service", None)
+    if service == "server":
+        return run_command(["make", "dev-server"], cwd=root)
+    if service == "web":
+        return run_command(["make", "dev-web"], cwd=root)
+    return run_command(["make", "dev-local"], cwd=root)
+
+
 def handle_devops(args: argparse.Namespace, config: NeoCliConfig) -> int:
     root = project_root(config)
     if args.command == "install":
-        web_dir = root / "apps" / "web"
         server_dir = root / "server"
-        if (server_dir / ".venv" / "bin" / "python").exists():
-            run_command([str(server_dir / ".venv" / "bin" / "python"), "-m", "pip", "install", "-e", "."], cwd=server_dir)
-        else:
-            print("Backend virtualenv missing. Please initialize server/.venv first.")
-            return 1
+        web_dir = root / "apps" / "web"
+        print("Installing server dependencies...")
+        ret = run_command(["uv", "sync"], cwd=server_dir)
+        if ret != 0:
+            return ret
+        print("Installing web dependencies...")
         return run_command(["pnpm", "install"], cwd=web_dir)
     if args.command == "clean":
         run_command(["bash", "-lc", "find . -type d -name __pycache__ -exec rm -rf {} +"], cwd=root)
@@ -516,6 +526,63 @@ def handle_openclaw(args: argparse.Namespace, config: NeoCliConfig) -> int:
         })
         return 0
     raise ValueError(f"Unsupported openclaw command: {args.openclaw_cmd}")
+
+
+def handle_deploy(args: argparse.Namespace, config: NeoCliConfig) -> int:
+    root = project_root(config)
+
+    if getattr(args, "direct", False):
+        info = {"mode": "direct", "script": "infra/scripts/deploy.sh"}
+        print_json({"code": 0, "message": "Starting direct SSH deployment...", "data": info})
+        return run_script(root, "infra/scripts/deploy.sh")
+
+    message = getattr(args, "message", None)
+    skip_push = getattr(args, "skip_push", False)
+
+    if not skip_push:
+        ret = subprocess.call(["git", "add", "-A"], cwd=str(root))
+        if ret != 0:
+            print_json({"code": -1, "message": "git add failed", "data": None})
+            return ret
+
+        status = subprocess.run(
+            ["git", "status", "--porcelain"],
+            cwd=str(root), capture_output=True, text=True,
+        )
+        if status.stdout.strip():
+            commit_msg = message or f"deploy: auto-commit at {time.strftime('%Y-%m-%d %H:%M:%S')}"
+            ret = subprocess.call(["git", "commit", "-m", commit_msg], cwd=str(root))
+            if ret != 0:
+                print_json({"code": -1, "message": "git commit failed", "data": None})
+                return ret
+        else:
+            print("No changes to commit.")
+
+        ret = subprocess.call(["git", "push", "origin", "main"], cwd=str(root))
+        if ret != 0:
+            print_json({"code": -1, "message": "git push failed", "data": None})
+            return ret
+
+    remote_url = subprocess.run(
+        ["git", "remote", "get-url", "origin"],
+        cwd=str(root), capture_output=True, text=True,
+    ).stdout.strip()
+
+    actions_url = ""
+    if "github.com" in remote_url:
+        repo_path = remote_url.replace("https://github.com/", "").replace(".git", "")
+        actions_url = f"https://github.com/{repo_path}/actions"
+
+    print_json({
+        "code": 0,
+        "message": "Code pushed to main. GitHub Actions will deploy automatically.",
+        "data": {
+            "branch": "main",
+            "actions_url": actions_url,
+            "tip": f"Track progress: {actions_url}" if actions_url else "Check your CI/CD dashboard.",
+        },
+    })
+    return 0
 
 
 def handle_api(args: argparse.Namespace, client: NeoApiClient) -> int:
@@ -616,6 +683,19 @@ def build_parser() -> argparse.ArgumentParser:
     system_logs.add_argument("service", choices=["server", "web"])
     system_logs.add_argument("--lines", type=int, default=40)
 
+    for alias in ("start", "stop", "restart", "health", "status"):
+        p = sub.add_parser(alias, help=f"{alias.capitalize()} services (shortcut for: system {alias})")
+        p.set_defaults(command="system", system_cmd=alias)
+
+    p_logs = sub.add_parser("logs", help="Show recent logs (shortcut for: system logs)")
+    p_logs.set_defaults(command="system", system_cmd="logs")
+    p_logs.add_argument("service", choices=["server", "web"])
+    p_logs.add_argument("--lines", type=int, default=40)
+
+    p_dev = sub.add_parser("dev", help="Start dev mode (foreground, hot-reload)")
+    p_dev.set_defaults(command="dev")
+    p_dev.add_argument("service", nargs="?", choices=["server", "web"], default=None)
+
     install = sub.add_parser("install", help="Install local dependencies")
     install.set_defaults(command="install")
 
@@ -629,6 +709,12 @@ def build_parser() -> argparse.ArgumentParser:
     openclaw_bootstrap.add_argument("--token-name", default="openclaw-operator")
     openclaw_bootstrap.add_argument("--expires-in-days", type=int, default=30)
     openclaw_bootstrap.add_argument("--client-name", default="openclaw-ecs")
+
+    p_deploy = sub.add_parser("deploy", help="Deploy to production (git push + GitHub Actions, or --direct SSH)")
+    p_deploy.set_defaults(command="deploy")
+    p_deploy.add_argument("-m", "--message", help="Git commit message")
+    p_deploy.add_argument("--direct", action="store_true", help="Skip GitHub Actions; SSH deploy directly via infra/scripts/deploy.sh")
+    p_deploy.add_argument("--skip-push", action="store_true", help="Skip git commit/push (trigger deploy only)")
 
     db = sub.add_parser("db", help="Database operations")
     db.set_defaults(command="db")
@@ -741,6 +827,10 @@ def main(argv: list[str] | None = None) -> int:
             return handle_config(args, config)
         if args.command == "system":
             return handle_system(args, config, client)
+        if args.command == "dev":
+            return handle_dev(args, config)
+        if args.command == "deploy":
+            return handle_deploy(args, config)
         if args.command in {"install", "clean", "db"}:
             return handle_devops(args, config)
         if args.command == "openclaw":

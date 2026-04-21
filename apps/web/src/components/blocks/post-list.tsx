@@ -32,7 +32,7 @@ const POST_CREATE_KEYS = ["slug", "title", "summary", "content", "cover_url", "t
 interface FieldDef {
   key: string;
   label: string;
-  type: "text" | "textarea" | "checkbox" | "url_with_upload" | "rich_editor";
+  type: "text" | "number" | "textarea" | "checkbox" | "url_with_upload" | "rich_editor";
 }
 
 function postFields(t: (k: TKey) => string): FieldDef[] {
@@ -43,7 +43,7 @@ function postFields(t: (k: TKey) => string): FieldDef[] {
     { key: "content", label: t("admin.fContent"), type: "rich_editor" },
     { key: "cover_url", label: t("admin.fCoverUrl"), type: "url_with_upload" },
     { key: "tags", label: t("admin.fTags"), type: "text" },
-    { key: "reading_time", label: t("admin.fReadingTime"), type: "text" },
+    { key: "reading_time", label: t("admin.fReadingTime"), type: "number" },
     { key: "published", label: t("admin.fPublished"), type: "checkbox" },
   ];
 }
@@ -201,6 +201,7 @@ function PostEditSheet({
             type="button"
             onClick={() => {
               fileRef.current?.setAttribute("data-field", "__import__");
+              fileRef.current?.setAttribute("accept", ".md,.markdown,.txt,.pdf,.html");
               fileRef.current?.click();
             }}
             className="rounded-lg border border-accent/40 bg-accent/10 px-3 py-2 text-xs font-medium text-accent hover:bg-accent/20 disabled:opacity-50"
@@ -236,6 +237,15 @@ function PostEditSheet({
                     type="text"
                     value={stringValue}
                     onChange={(e) => set(field.key, field.key === "tags" ? e.target.value.split(",").map((item) => item.trim()) : e.target.value)}
+                    className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:border-accent focus:outline-none"
+                  />
+                )}
+                {field.type === "number" && (
+                  <input
+                    type="number"
+                    min={0}
+                    value={stringValue}
+                    onChange={(e) => set(field.key, parseInt(e.target.value, 10) || 0)}
                     className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:border-accent focus:outline-none"
                   />
                 )}
@@ -278,6 +288,7 @@ function PostEditSheet({
                         disabled={uploadingField === field.key}
                         onClick={() => {
                           fileRef.current?.setAttribute("data-field", field.key);
+                          fileRef.current?.setAttribute("accept", "image/*");
                           fileRef.current?.click();
                         }}
                         className="rounded-lg border border-accent/40 bg-accent/10 px-3 py-2 text-xs font-medium text-accent hover:bg-accent/20 disabled:opacity-50"
@@ -301,7 +312,6 @@ function PostEditSheet({
         <input
           ref={fileRef}
           type="file"
-          accept="image/*"
           className="hidden"
           onChange={async (e) => {
             const file = e.target.files?.[0];

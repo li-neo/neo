@@ -8,6 +8,7 @@ import dynamic from "next/dynamic";
 import { Footer } from "@/components/layout/footer";
 import { Navbar } from "@/components/layout/navbar";
 import { MarkdownRenderer } from "@/components/blocks/markdown-renderer";
+import { richTextToPlain } from "@/lib/utils";
 import type { TocItem } from "@/lib/markdown-doc";
 
 const RichViewerLazy = dynamic(
@@ -129,7 +130,7 @@ export function EntityDocLayout({
                         {titleNode ?? title}
                       </h1>
                       {(summaryNode ?? summary) &&
-                        (summaryNode ?? <p className="max-w-3xl text-lg leading-8 text-muted-foreground">{summary}</p>)}
+                        (summaryNode ?? <p className="max-w-3xl text-lg leading-8 text-muted-foreground">{richTextToPlain(summary)}</p>)}
                     </div>
 
                     {highlights && highlights.length > 0 && (

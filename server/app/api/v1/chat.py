@@ -181,8 +181,8 @@ async def chat_send(
                     headers=req_headers,
                 ) as resp:
                     if resp.status_code != 200:
-                        err_body = await resp.aread()
-                        yield f"data: {_sse_json({'error': 'Service error'})}\n\n"
+                        await resp.aread()
+                        yield f"data: {_sse_json({'error': f'Service error ({resp.status_code})'})}\n\n"
                         return
                     buf = ""
                     async for chunk_bytes in resp.aiter_bytes():

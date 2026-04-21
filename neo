@@ -8,6 +8,20 @@ while [[ -L "$SOURCE_PATH" ]]; do
   [[ "$SOURCE_PATH" != /* ]] && SOURCE_PATH="$LINK_DIR/$SOURCE_PATH"
 done
 ROOT_DIR="$(cd "$(dirname "$SOURCE_PATH")" && pwd)"
+
+if [[ "${1:-}" == "setup-path" ]]; then
+  LINK="/usr/local/bin/neo"
+  if [[ -e "$LINK" ]]; then
+    echo "neo is already installed at $LINK"
+  else
+    ln -sf "$ROOT_DIR/neo" "$LINK" 2>/dev/null \
+      || sudo ln -sf "$ROOT_DIR/neo" "$LINK"
+    echo "neo → $LINK (symlink created)"
+  fi
+  echo "You can now run 'neo' from anywhere."
+  exit 0
+fi
+
 CLI_VENV_PYTHON="$ROOT_DIR/.venv-cli/bin/python"
 VENV_PYTHON="$ROOT_DIR/server/.venv/bin/python"
 

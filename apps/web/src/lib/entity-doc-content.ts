@@ -1,8 +1,15 @@
 import type { Project, Skill } from "@/lib/api";
 import type { Locale } from "@/lib/i18n";
+import { richTextToPlain } from "@/lib/utils";
 
 function section(title: string, body: string) {
   return `## ${title}\n\n${body.trim()}`;
+}
+
+function descriptionText(raw: string | null | undefined, fallback: string): string {
+  if (!raw || !raw.trim()) return fallback;
+  const plain = richTextToPlain(raw);
+  return plain || fallback;
 }
 
 export function buildProjectDoc(project: Project, locale: Locale): string {
@@ -12,7 +19,7 @@ export function buildProjectDoc(project: Project, locale: Locale): string {
   parts.push(
     section(
       zh ? "项目概述" : "Overview",
-      project.description?.trim() || (zh ? "该项目暂未补充详细说明。" : "This project does not include a long-form description yet.")
+      descriptionText(project.description, zh ? "该项目暂未补充详细说明。" : "This project does not include a long-form description yet.")
     )
   );
 
@@ -67,7 +74,7 @@ export function buildSkillDoc(skill: Skill, locale: Locale): string {
   parts.push(
     section(
       zh ? "能力概述" : "Overview",
-      skill.description?.trim() || (zh ? "该 Skill 暂未补充详细说明。" : "This skill does not include a long-form description yet.")
+      descriptionText(skill.description, zh ? "该 Skill 暂未补充详细说明。" : "This skill does not include a long-form description yet.")
     )
   );
 

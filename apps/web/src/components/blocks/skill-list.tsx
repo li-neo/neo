@@ -52,6 +52,7 @@ function pickKeys<T extends Record<string, unknown>>(data: T, keys: readonly str
 }
 
 function SkillEditSheet({
+  token,
   data,
   onChange,
   onSave,
@@ -59,6 +60,7 @@ function SkillEditSheet({
   saving,
   categoryOptions,
 }: {
+  token: string;
   data: Record<string, unknown>;
   onChange: (next: Record<string, unknown>) => void;
   onSave: () => void;
@@ -116,7 +118,7 @@ function SkillEditSheet({
                   <RichEditor
                     key={`${data.id ?? "new"}-${field.key}`}
                     initialContent={stringValue}
-                    token={typeof window !== "undefined" ? localStorage.getItem(TOKEN_KEY) ?? undefined : undefined}
+                    token={token}
                     onChange={(json) => set(field.key, json)}
                   />
                 )}
@@ -245,8 +247,9 @@ export function SkillList({ skills }: { skills: Skill[] }) {
         </div>
       )}
 
-      {isAdmin && editing && (
+      {isAdmin && editing && token && (
         <SkillEditSheet
+          token={token}
           data={editing}
           onChange={setEditing}
           onSave={saveSkill}

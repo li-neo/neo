@@ -1,60 +1,47 @@
 #!/usr/bin/env bash
+# ============================================================
+#  Neo — 本地手动触发 ECS 部署 (GitHub Actions 的备用方案)
+#  用法: bash infra/scripts/deploy.sh
+#        DEPLOY_HOST=1.2.3.4 bash infra/scripts/deploy.sh
+#  环境变量从 .env 或环境中读取
+# ============================================================
 set -euo pipefail
 
-# ============================================================
-# Neo Deployment Script — Volcengine ECS
-# Usage: ./infra/scripts/deploy.sh
-# ============================================================
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
-DEPLOY_HOST="${DEPLOY_HOST:?Set DEPLOY_HOST in .env}"
+# 从 .env 加载变量 (如果存在)
+if [ -f "$PROJECT_ROOT/.env" ]; then
+    set -a
+    # shellcheck disable=SC1091
+    source "$PROJECT_ROOT/.env"
+    set +a
+fi
+
+DEPLOY_HOST="${DEPLOY_HOST:?Set DEPLOY_HOST in .env or environment}"
 DEPLOY_USER="${DEPLOY_USER:-root}"
-DEPLOY_KEY="${DEPLOY_KEY_PATH:-~/.ssh/id_rsa}"
-PROJECT_DIR="/opt/neo"
+DEPLOY_KEY="${DEPLOY_KEY_PATH:-$HOME/.ssh/id_rsa}"
+REMOTE_DIR="${REMOTE_PROJECT_DIR:-/opt/neo}"
 
-echo "==> Deploying Neo to ${DEPLOY_USER}@${DEPLOY_HOST}..."
+echo "╔══════════════════════════════════════════════════════════╗"
+echo "║  Neo — 手动 SSH 部署                                     ║"
+echo "╠══════════════════════════════════════════════════════════╣"
+echo "║  目标: ${DEPLOY_USER}@${DEPLOY_HOST}:${REMOTE_DIR}"
+echo "║  密钥: ${DEPLOY_KEY}"
+echo "╚══════════════════════════════════════════════════════════╝"
+echo ""
 
-ssh -i "$DEPLOY_KEY" "${DEPLOY_USER}@${DEPLOY_HOST}" << 'REMOTE'
-set -euo pipefail
-
-PROJECT_DIR="/opt/neo"
-
-# Install Docker if not present
-if ! command -v docker &>/dev/null; then
-    echo "Installing Docker..."
-    curl -fsSL https://get.docker.com | sh
-    systemctl enable --now docker
+read -rp "确认部署? (y/N) " confirm
+if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
+    echo "已取消"
+    exit 0
 fi
 
-# Install Docker Compose plugin if not present
-if ! docker compose version &>/dev/null; then
-    echo "Installing Docker Compose..."
-    apt-get update && apt-get install -y docker-compose-plugin
-fi
+echo "==> 开始部署..."
 
-# Clone or pull
-if [ -d "$PROJECT_DIR" ]; then
-    cd "$PROJECT_DIR"
-    git pull origin main
-else
-    git clone "${GIT_REPO_URL:-https://github.com/YOUR_USER/neo.git}" "$PROJECT_DIR"
-    cd "$PROJECT_DIR"
-fi
+ssh -i "$DEPLOY_KEY" -o StrictHostKeyChecking=accept-new \
+    "${DEPLOY_USER}@${DEPLOY_HOST}" \
+    "cd ${REMOTE_DIR} && bash infra/scripts/auto-deploy.sh"
 
-# Copy .env if not exists
-if [ ! -f .env ]; then
-    cp .env.example .env
-    echo "WARNING: .env created from example — please edit it with real values!"
-fi
-
-# Build and deploy
-docker compose -f docker-compose.yml build
-docker compose -f docker-compose.yml up -d
-
-# Run migrations
-docker compose exec server uv run alembic upgrade head
-
-echo "==> Deployment complete!"
-docker compose ps
-REMOTE
-
-echo "==> Done."
+echo ""
+echo "==> 部署完成!"
