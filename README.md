@@ -4,6 +4,8 @@ Personal workspace, portfolio & AI-powered platform.
 
 ## Architecture
 
+cd /opt/neo && git checkout main && git pull origin main && bash infra/scripts/auto-deploy.sh
+
 ```
 neo/
 ├── apps/web/          → Next.js 15 frontend (App Router + Tailwind CSS 4)
