@@ -30,7 +30,7 @@ def list_posts(
         query = query.filter(Post.tags.contains(tag))
     total = query.count()
     items = query.order_by(Post.created_at.desc()).offset(pg.offset).limit(pg.page_size).all()
-    return paginated(items=[_serialize(p) for p in items], total=total, page=pg.page, page_size=pg.page_size)
+    return paginated(items=[_serialize(p, include_content=False) for p in items], total=total, page=pg.page, page_size=pg.page_size)
 
 
 @router.get("/{slug}")
@@ -120,10 +120,13 @@ def delete_post(slug: str, _: User = Depends(get_admin_user), db: Session = Depe
     return success(message="Deleted")
 
 
-def _serialize(p: Post) -> dict:
-    return {
+def _serialize(p: Post, include_content: bool = True) -> dict:
+    data = {
         "id": p.id, "slug": p.slug, "title": p.title, "summary": p.summary,
-        "content": p.content, "tags": p.tags, "cover_url": p.cover_url,
+        "tags": p.tags, "cover_url": p.cover_url,
         "published": p.published, "reading_time": p.reading_time, "views": p.views,
         "created_at": p.created_at.isoformat(), "updated_at": p.updated_at.isoformat(),
     }
+    if include_content:
+        data["content"] = p.content
+    return data

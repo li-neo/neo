@@ -31,7 +31,7 @@ def list_projects(
         query = query.filter(Project.featured == featured)
     total = query.count()
     items = query.order_by(Project.sort_order.asc(), Project.created_at.desc()).offset(pg.offset).limit(pg.page_size).all()
-    return paginated(items=[_serialize(p) for p in items], total=total, page=pg.page, page_size=pg.page_size)
+    return paginated(items=[_serialize(p, truncate_desc=True) for p in items], total=total, page=pg.page, page_size=pg.page_size)
 
 
 @router.get("/{slug}")
@@ -81,9 +81,12 @@ def delete_project(slug: str, _: User = Depends(get_admin_user), db: Session = D
     return success(message="Deleted")
 
 
-def _serialize(p: Project) -> dict:
+def _serialize(p: Project, truncate_desc: bool = False) -> dict:
+    desc = p.description
+    if truncate_desc and desc and len(desc) > 300:
+        desc = desc[:300] + "…"
     return {
-        "id": p.id, "slug": p.slug, "title": p.title, "description": p.description,
+        "id": p.id, "slug": p.slug, "title": p.title, "description": desc,
         "category": p.category, "tech_stack": p.tech_stack, "cover_url": p.cover_url,
         "demo_url": p.demo_url, "repo_url": p.repo_url, "hf_url": p.hf_url,
         "featured": p.featured, "sort_order": p.sort_order, "status": p.status,
