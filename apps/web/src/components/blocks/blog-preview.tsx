@@ -3,6 +3,7 @@
 import { motion } from "framer-motion";
 import type { Post } from "@/lib/api";
 import { useI18n, dateLocale } from "@/lib/i18n";
+import { richTextToPlain } from "@/lib/rich-text";
 
 export function BlogPreview({ posts }: { posts: Post[] }) {
   const { t, locale } = useI18n();
@@ -63,7 +64,7 @@ export function BlogPreview({ posts }: { posts: Post[] }) {
                   {post.title}
                 </h3>
                 <p className="line-clamp-2 text-sm text-muted-foreground">
-                  {post.summary}
+                  {richTextToPlain(post.summary)}
                 </p>
                 {post.tags && post.tags.length > 0 && (
                   <div className="mt-3 flex flex-wrap gap-1.5">

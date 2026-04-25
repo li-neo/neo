@@ -4,6 +4,7 @@ import Link from "next/link";
 import { motion } from "framer-motion";
 import type { Project } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
+import { richTextToPlain } from "@/lib/rich-text";
 
 const CATEGORY_STYLES: Record<string, { label: string; color: string }> = {
   llm: { label: "LLM", color: "from-blue-500 to-cyan-500" },
@@ -70,7 +71,7 @@ export function ProjectsPreview({ projects }: { projects: Project[] }) {
                   </div>
                   <h3 className="mb-2 text-lg font-semibold">{project.title}</h3>
                   <p className="mb-4 line-clamp-2 text-sm text-muted-foreground">
-                    {project.description}
+                    {richTextToPlain(project.description)}
                   </p>
                   {project.tech_stack && (
                     <div className="flex flex-wrap gap-1.5">

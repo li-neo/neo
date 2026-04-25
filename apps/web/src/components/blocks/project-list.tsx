@@ -1,21 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import { useRouter } from "next/navigation";
 import { api, type Project } from "@/lib/api";
 import { useI18n, type TKey } from "@/lib/i18n";
 import { richTextToPlain } from "@/lib/utils";
-import { SingleOptionInput, MultiOptionInput } from "@/components/ui/flexible-fields";
 import { ensureStringArray, mergeFlexibleOptions } from "@/lib/flexible-options";
-import { compressImage } from "@/lib/image-upload";
-import dynamic from "next/dynamic";
-
-const RichEditor = dynamic(
-  () => import("@/components/blocks/rich-editor").then(m => m.RichEditor),
-  { ssr: false, loading: () => <div className="h-48 animate-pulse rounded-2xl bg-muted/30" /> },
-);
+import { DetailEditSheet } from "@/components/blocks/detail-edit-sheet";
+import { TOKEN_KEY, createEmptyProject, pickProjectPayload, projectFields } from "@/lib/entity-editor-config";
 
 type ProjectCategoryOption =
   | { key: string; labelKey: TKey }
@@ -29,258 +23,6 @@ const DEFAULT_CATEGORIES: ProjectCategoryOption[] = [
   { key: "world_model", label: "World Model" },
   { key: "tool", label: "Tool" },
 ];
-
-const TOKEN_KEY = "neo-admin-token";
-const PROJECT_CREATE_KEYS = ["slug", "title", "description", "category", "tech_stack", "cover_url", "repo_url", "demo_url", "hf_url", "featured", "status"] as const;
-
-interface FieldDef {
-  key: string;
-  label: string;
-  type: "text" | "textarea" | "select" | "checkbox" | "url_with_upload" | "single_option" | "multi_option" | "rich_editor";
-  options?: string[];
-}
-
-function projectFields(t: (k: TKey) => string, categoryOptions: string[], techStackOptions: string[]): FieldDef[] {
-  return [
-    { key: "title", label: t("admin.fTitle"), type: "text" },
-    { key: "slug", label: t("admin.fSlug"), type: "text" },
-    { key: "category", label: t("admin.fCategory"), type: "single_option", options: categoryOptions },
-    { key: "description", label: t("admin.fDescription"), type: "rich_editor" },
-    { key: "tech_stack", label: t("admin.fTechStack"), type: "multi_option", options: techStackOptions },
-    { key: "cover_url", label: t("admin.fCoverUrl"), type: "url_with_upload" },
-    { key: "repo_url", label: t("admin.fRepoUrl"), type: "text" },
-    { key: "demo_url", label: t("admin.fDemoUrl"), type: "text" },
-    { key: "hf_url", label: t("admin.fHfUrl"), type: "text" },
-    { key: "featured", label: t("admin.fFeatured"), type: "checkbox" },
-    { key: "status", label: t("admin.fStatus"), type: "select", options: ["published", "draft", "archived"] },
-  ];
-}
-
-function pickKeys<T extends Record<string, unknown>>(data: T, keys: readonly string[]): Partial<T> {
-  const out: Record<string, unknown> = {};
-  for (const key of keys) {
-    if (!(key in data)) continue;
-    let value = data[key];
-    if (key === "tech_stack" && Array.isArray(value)) {
-      value = (value as string[]).filter((item) => item.length > 0);
-      if ((value as string[]).length === 0) value = null;
-    }
-    if (value === "") value = null;
-    out[key] = value;
-  }
-  return out as Partial<T>;
-}
-
-function ProjectEditSheet({
-  token,
-  data,
-  onChange,
-  onSave,
-  onCancel,
-  saving,
-  categoryOptions,
-  techStackOptions,
-}: {
-  token: string;
-  data: Record<string, unknown>;
-  onChange: (next: Record<string, unknown>) => void;
-  onSave: () => void;
-  onCancel: () => void;
-  saving: boolean;
-  categoryOptions: string[];
-  techStackOptions: string[];
-}) {
-  const { t } = useI18n();
-  const fileRef = useRef<HTMLInputElement>(null);
-  const [uploadingField, setUploadingField] = useState<string | null>(null);
-
-  const set = (key: string, value: unknown) => onChange({ ...data, [key]: value });
-
-  const handleFileUpload = async (key: string, file: File) => {
-    setUploadingField(key);
-    const compressed = await compressImage(file);
-    const res = await api.admin.upload(token, compressed);
-    if (res.data) {
-      const url = res.data.url.startsWith("http")
-        ? res.data.url
-        : `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}${res.data.url}`;
-      set(key, url);
-    }
-    setUploadingField(null);
-  };
-
-  return (
-    <div className="fixed inset-0 z-50 flex justify-end bg-stone-950/40 backdrop-blur-sm">
-      <div className="h-full w-full max-w-2xl overflow-y-auto border-l border-white/10 bg-background px-6 py-6 shadow-2xl">
-        <div className="mb-6 flex items-center justify-between">
-          <div>
-            <p className="text-xs font-medium uppercase tracking-[0.16em] text-orange-500">
-              {t("admin.mode")}
-            </p>
-            <h3 className="mt-2 text-2xl font-semibold">
-              {data.id ? t("admin.edit") : t("admin.create")}
-            </h3>
-          </div>
-          <button
-            onClick={onCancel}
-            className="rounded-full border border-border px-3 py-1 text-sm text-muted-foreground transition-colors hover:bg-muted"
-          >
-            {t("admin.cancel")}
-          </button>
-        </div>
-
-        <div className="grid gap-4 sm:grid-cols-2">
-          {projectFields(t, categoryOptions, techStackOptions).map((field) => {
-            const rawValue = data[field.key];
-            const stringValue = String(rawValue ?? "");
-            const previewUrl = typeof rawValue === "string" ? rawValue.trim() : "";
-
-            return (
-              <div key={field.key} className={field.type === "textarea" || field.type === "url_with_upload" || field.type === "rich_editor" ? "sm:col-span-2" : ""}>
-                <label className="mb-1 block text-xs font-medium text-muted-foreground">{field.label}</label>
-
-                {field.type === "text" && (
-                  <input
-                    type="text"
-                    value={stringValue}
-                    onChange={(e) => set(field.key, e.target.value)}
-                    className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:border-accent focus:outline-none"
-                  />
-                )}
-
-                {field.type === "single_option" && (
-                  <SingleOptionInput
-                    value={stringValue}
-                    options={field.options ?? []}
-                    onChange={(next) => set(field.key, next)}
-                    placeholder={field.label}
-                  />
-                )}
-
-                {field.type === "multi_option" && (
-                  <MultiOptionInput
-                    values={ensureStringArray(rawValue)}
-                    options={field.options ?? []}
-                    onChange={(next) => set(field.key, next)}
-                    placeholder={field.label}
-                  />
-                )}
-
-                {field.type === "textarea" && (
-                  <textarea
-                    value={stringValue}
-                    onChange={(e) => set(field.key, e.target.value)}
-                    rows={4}
-                    className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:border-accent focus:outline-none"
-                  />
-                )}
-
-                {field.type === "rich_editor" && (
-                  <RichEditor
-                    key={`${data.id ?? "new"}-${field.key}`}
-                    initialContent={stringValue}
-                    token={token}
-                    onChange={(json) => set(field.key, json)}
-                  />
-                )}
-
-                {field.type === "select" && (
-                  <select
-                    value={stringValue}
-                    onChange={(e) => set(field.key, e.target.value)}
-                    className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:border-accent focus:outline-none"
-                  >
-                    {field.options?.map((option) => (
-                      <option key={option} value={option}>
-                        {option}
-                      </option>
-                    ))}
-                  </select>
-                )}
-
-                {field.type === "checkbox" && (
-                  <input
-                    type="checkbox"
-                    checked={Boolean(rawValue)}
-                    onChange={(e) => set(field.key, e.target.checked)}
-                    className="h-4 w-4 rounded border-border"
-                  />
-                )}
-
-                {field.type === "url_with_upload" && (
-                  <div className="space-y-2">
-                    <div className="flex gap-2">
-                      <input
-                        type="text"
-                        value={stringValue}
-                        onChange={(e) => set(field.key, e.target.value)}
-                        placeholder="https://... or upload"
-                        className="flex-1 rounded-lg border border-border bg-background px-3 py-2 text-sm focus:border-accent focus:outline-none"
-                      />
-                      <button
-                        type="button"
-                        disabled={uploadingField === field.key}
-                        onClick={() => {
-                          fileRef.current?.setAttribute("data-field", field.key);
-                          fileRef.current?.click();
-                        }}
-                        className="rounded-lg border border-accent/40 bg-accent/10 px-3 py-2 text-xs font-medium text-accent hover:bg-accent/20 disabled:opacity-50"
-                      >
-                        {uploadingField === field.key ? t("admin.uploading") : t("admin.upload")}
-                      </button>
-                    </div>
-                    {previewUrl.length > 0 && (
-                      <div className="flex items-center gap-3 rounded-lg bg-muted/30 p-2">
-                        <img
-                          src={previewUrl}
-                          alt="preview"
-                          className="h-16 w-24 rounded-md object-cover"
-                          onError={(e) => {
-                            (e.target as HTMLImageElement).style.display = "none";
-                          }}
-                        />
-                        <span className="truncate text-xs text-muted-foreground">{previewUrl}</span>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-
-        <input
-          ref={fileRef}
-          type="file"
-          accept="image/*"
-          className="hidden"
-          onChange={async (e) => {
-            const file = e.target.files?.[0];
-            const field = fileRef.current?.getAttribute("data-field");
-            if (file && field) await handleFileUpload(field, file);
-            e.target.value = "";
-          }}
-        />
-
-        <div className="mt-6 flex gap-3">
-          <button
-            onClick={onSave}
-            disabled={saving}
-            className="rounded-lg bg-accent px-5 py-2 text-sm font-medium text-accent-foreground disabled:opacity-50"
-          >
-            {saving ? t("admin.saving") : t("admin.save")}
-          </button>
-          <button
-            onClick={onCancel}
-            className="rounded-lg border px-5 py-2 text-sm text-muted-foreground transition-colors hover:bg-muted"
-          >
-            {t("admin.cancel")}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 export function ProjectList({
   projects,
@@ -359,19 +101,7 @@ export function ProjectList({
   }, [toast]);
 
   const openCreate = () => {
-    setEditing({
-      title: "",
-      slug: "",
-      category: activeCategory || "llm",
-      description: "",
-      tech_stack: [],
-      cover_url: "",
-      repo_url: "",
-      demo_url: "",
-      hf_url: "",
-      featured: false,
-      status: "published",
-    });
+    setEditing(createEmptyProject(activeCategory || "llm"));
   };
 
   const saveProject = async () => {
@@ -379,7 +109,7 @@ export function ProjectList({
     setSaving(true);
     try {
       const isNew = !editing.id;
-      const payload = pickKeys(editing, [...PROJECT_CREATE_KEYS]);
+      const payload = pickProjectPayload(editing);
       const res = isNew
         ? await api.admin.projects.create(token, payload)
         : await api.admin.projects.update(token, String(editing.slug), payload);
@@ -415,15 +145,21 @@ export function ProjectList({
       )}
 
       {isAdmin && token && editing && (
-        <ProjectEditSheet
+        <DetailEditSheet
+          open
+          title={editing.id ? t("admin.edit") : t("admin.create")}
           token={token}
+          fields={projectFields(t, categoryOptions, techStackOptions)}
           data={editing}
           onChange={setEditing}
           onSave={saveProject}
           onCancel={() => setEditing(null)}
           saving={saving}
-          categoryOptions={categoryOptions}
-          techStackOptions={techStackOptions}
+          modeLabel={t("admin.mode")}
+          closeLabel={t("admin.cancel")}
+          saveLabel={t("admin.save")}
+          savingLabel={t("admin.saving")}
+          cancelLabel={t("admin.cancel")}
         />
       )}
 

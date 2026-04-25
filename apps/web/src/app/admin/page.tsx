@@ -6,31 +6,33 @@ import { api, type Project, type Skill, type Post, type GuestbookEntry } from "@
 import { Navbar } from "@/components/layout/navbar";
 import { LocaleToggle } from "@/components/layout/locale-toggle";
 import { MarkdownRenderer } from "@/components/blocks/markdown-renderer";
+import { DetailEditSheet } from "@/components/blocks/detail-edit-sheet";
 import { embedPostSourceMeta, parsePostSourceMeta, sourceLabel } from "@/lib/post-content";
-import { SingleOptionInput, MultiOptionInput } from "@/components/ui/flexible-fields";
 import { ensureStringArray, mergeFlexibleOptions } from "@/lib/flexible-options";
 import { compressImage } from "@/lib/image-upload";
 import dynamic from "next/dynamic";
-
-const RichEditor = dynamic(
-  () => import("@/components/blocks/rich-editor").then(m => m.RichEditor),
-  { ssr: false, loading: () => <div className="h-64 animate-pulse rounded-2xl bg-muted/30" /> },
-);
+import {
+  TOKEN_KEY,
+  DEFAULT_PROJECT_CATEGORIES,
+  DEFAULT_SKILL_CATEGORIES,
+  createEmptyPost,
+  createEmptyProject,
+  createEmptySkill,
+  pickPostPayload,
+  pickProjectPayload,
+  pickSkillPayload,
+  postFields,
+  projectFields,
+  skillFields,
+} from "@/lib/entity-editor-config";
+import { isRichTextJson } from "@/lib/rich-text";
 
 const RichViewerLazy = dynamic(
   () => import("@/components/blocks/rich-editor").then(m => m.RichViewer),
   { ssr: false, loading: () => <div className="h-32 animate-pulse rounded-2xl bg-muted/30" /> },
 );
 
-function isBlockNoteJson(content: string | null | undefined): boolean {
-  if (!content) return false;
-  const trimmed = content.trim();
-  if (!trimmed.startsWith("[")) return false;
-  try { const p = JSON.parse(trimmed); return Array.isArray(p); } catch { return false; }
-}
-
 /* ─── token helper ─── */
-const TOKEN_KEY = "neo-admin-token";
 
 function useToken() {
   const [token, setTokenState] = useState<string | null>(null);
@@ -303,40 +305,6 @@ function GitHubImportPanel({ token, t, toast, onDone }: PanelProps & { onDone: (
 }
 
 /* ─── Projects Panel ─── */
-const PROJECT_CREATE_KEYS = ["slug", "title", "description", "category", "tech_stack", "cover_url", "repo_url", "demo_url", "hf_url", "featured", "status"] as const;
-const DEFAULT_PROJECT_CATEGORIES = ["llm", "vla", "multimodal", "world_model", "tool"] as const;
-const DEFAULT_SKILL_CATEGORIES = ["development", "documentation", "devops", "ml", "data"] as const;
-
-function projectFields(t: (k: TKey) => string, categoryOptions: string[], techStackOptions: string[]): FieldDef[] {
-  return [
-    { key: "title", label: t("admin.fTitle"), type: "text" },
-    { key: "slug", label: t("admin.fSlug"), type: "text" },
-    { key: "category", label: t("admin.fCategory"), type: "single_option", options: categoryOptions },
-    { key: "description", label: t("admin.fDescription"), type: "rich_editor" },
-    { key: "tech_stack", label: t("admin.fTechStack"), type: "multi_option", options: techStackOptions },
-    { key: "cover_url", label: t("admin.fCoverUrl"), type: "url_with_upload" },
-    { key: "repo_url", label: t("admin.fRepoUrl"), type: "text" },
-    { key: "demo_url", label: t("admin.fDemoUrl"), type: "text" },
-    { key: "hf_url", label: t("admin.fHfUrl"), type: "text" },
-    { key: "featured", label: t("admin.fFeatured"), type: "checkbox" },
-    { key: "status", label: t("admin.fStatus"), type: "select", options: ["published", "draft", "archived"] },
-  ];
-}
-
-function pickKeys<T extends Record<string, unknown>>(data: T, keys: readonly string[]): Partial<T> {
-  const out: Record<string, unknown> = {};
-  for (const k of keys) {
-    if (!(k in data)) continue;
-    let v = data[k];
-    if (k === "tech_stack" && Array.isArray(v)) {
-      v = (v as string[]).filter(s => s.length > 0);
-      if ((v as string[]).length === 0) v = null;
-    }
-    if (v === "") v = null;
-    out[k] = v;
-  }
-  return out as Partial<T>;
-}
 
 function ProjectsPanel({ token, t, toast }: PanelProps) {
   const [showGhImport, setShowGhImport] = useState(false);
@@ -368,7 +336,7 @@ function ProjectsPanel({ token, t, toast }: PanelProps) {
     setSaving(true);
     try {
       const isNew = !editing.id;
-      const payload = pickKeys(editing, [...PROJECT_CREATE_KEYS]);
+      const payload = pickProjectPayload(editing as Record<string, unknown>);
       const res = isNew
         ? await api.admin.projects.create(token, payload)
         : await api.admin.projects.update(token, editing.slug!, payload);
@@ -392,11 +360,28 @@ function ProjectsPanel({ token, t, toast }: PanelProps) {
           className="rounded-lg border border-accent/40 bg-accent/10 px-4 py-2 text-sm font-medium text-accent hover:bg-accent/20">
           {t("admin.ghImport")}
         </button>
-        <button onClick={() => setEditing({ title: "", slug: "", category: "llm", description: "", tech_stack: [], status: "published", featured: false })}
+        <button onClick={() => setEditing(createEmptyProject())}
           className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-foreground">{t("admin.create")}</button>
       </div>
       {showGhImport && <GitHubImportPanel token={token} t={t} toast={toast} onDone={() => { setShowGhImport(false); load(); }} />}
-      {editing && <EditForm fields={projectFields(t, categoryOptions, techStackOptions)} data={editing} onChange={setEditing} onSave={save} onCancel={() => setEditing(null)} t={t} saving={saving} token={token} />}
+      {editing && (
+        <DetailEditSheet
+          open
+          title={editing.id ? t("admin.edit") : t("admin.create")}
+          token={token}
+          fields={projectFields(t, categoryOptions, techStackOptions)}
+          data={editing as Record<string, unknown>}
+          onChange={(next) => setEditing(next as Partial<Project>)}
+          onSave={save}
+          onCancel={() => setEditing(null)}
+          saving={saving}
+          modeLabel={t("admin.mode")}
+          closeLabel={t("admin.cancel")}
+          saveLabel={t("admin.save")}
+          savingLabel={t("admin.saving")}
+          cancelLabel={t("admin.cancel")}
+        />
+      )}
       <div className="space-y-2">
         {projects.map(p => (
           <div key={p.slug} className="flex items-center justify-between rounded-xl border border-border/50 bg-card p-4">
@@ -418,21 +403,6 @@ function ProjectsPanel({ token, t, toast }: PanelProps) {
 }
 
 /* ─── Skills Panel ─── */
-const SKILL_CREATE_KEYS = ["slug", "name", "description", "category", "version", "platform", "install_command", "source_url", "status"] as const;
-
-function skillFields(t: (k: TKey) => string, categoryOptions: string[]): FieldDef[] {
-  return [
-    { key: "name", label: t("admin.fName"), type: "text" },
-    { key: "slug", label: t("admin.fSlug"), type: "text" },
-    { key: "category", label: t("admin.fCategory"), type: "single_option", options: categoryOptions },
-    { key: "description", label: t("admin.fDescription"), type: "rich_editor" },
-    { key: "version", label: t("admin.fVersion"), type: "text" },
-    { key: "platform", label: t("admin.fPlatform"), type: "select", options: ["openclaw", "mcp", "other"] },
-    { key: "install_command", label: t("admin.fInstallCmd"), type: "text" },
-    { key: "source_url", label: t("admin.fSourceUrl"), type: "text" },
-    { key: "status", label: t("admin.fStatus"), type: "select", options: ["published", "draft", "archived"] },
-  ];
-}
 
 function SkillsPanel({ token, t, toast }: PanelProps) {
   const [skills, setSkills] = useState<Skill[]>([]);
@@ -456,7 +426,7 @@ function SkillsPanel({ token, t, toast }: PanelProps) {
     setSaving(true);
     try {
       const isNew = !editing.id;
-      const payload = pickKeys(editing, [...SKILL_CREATE_KEYS]);
+      const payload = pickSkillPayload(editing as Record<string, unknown>);
       const res = isNew
         ? await api.admin.skills.create(token, payload)
         : await api.admin.skills.update(token, editing.slug!, payload);
@@ -476,10 +446,27 @@ function SkillsPanel({ token, t, toast }: PanelProps) {
   return (
     <div>
       <div className="mb-4 flex justify-end">
-        <button onClick={() => setEditing({ name: "", slug: "", category: "development", description: "", status: "published", version: "0.1.0", platform: "openclaw" })}
+        <button onClick={() => setEditing(createEmptySkill())}
           className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-foreground">{t("admin.create")}</button>
       </div>
-      {editing && <EditForm fields={skillFields(t, categoryOptions)} data={editing} onChange={setEditing} onSave={save} onCancel={() => setEditing(null)} t={t} saving={saving} token={token} />}
+      {editing && (
+        <DetailEditSheet
+          open
+          title={editing.id ? t("admin.edit") : t("admin.create")}
+          token={token}
+          fields={skillFields(t, categoryOptions)}
+          data={editing as Record<string, unknown>}
+          onChange={(next) => setEditing(next as Partial<Skill>)}
+          onSave={save}
+          onCancel={() => setEditing(null)}
+          saving={saving}
+          modeLabel={t("admin.mode")}
+          closeLabel={t("admin.cancel")}
+          saveLabel={t("admin.save")}
+          savingLabel={t("admin.saving")}
+          cancelLabel={t("admin.cancel")}
+        />
+      )}
       <div className="space-y-2">
         {skills.map(s => (
           <div key={s.slug} className="flex items-center justify-between rounded-xl border border-border/50 bg-card p-4">
@@ -501,20 +488,6 @@ function SkillsPanel({ token, t, toast }: PanelProps) {
 }
 
 /* ─── Blog Panel ─── */
-const POST_CREATE_KEYS = ["slug", "title", "summary", "content", "tags", "cover_url", "reading_time", "published"] as const;
-
-function blogFields(t: (k: TKey) => string): FieldDef[] {
-  return [
-    { key: "title", label: t("admin.fTitle"), type: "text" },
-    { key: "slug", label: t("admin.fSlug"), type: "text" },
-    { key: "summary", label: t("admin.fSummary"), type: "textarea" },
-    { key: "tags", label: t("admin.fTags"), type: "text" },
-    { key: "cover_url", label: t("admin.fCoverUrl"), type: "url_with_upload" },
-    { key: "reading_time", label: t("admin.fReadingTime"), type: "text" },
-    { key: "published", label: t("admin.fPublished"), type: "checkbox" },
-    { key: "content", label: t("admin.fContent"), type: "rich_editor" },
-  ];
-}
 
 function BlogPanel({ token, t, toast }: PanelProps) {
   const [posts, setPosts] = useState<Post[]>([]);
@@ -537,10 +510,7 @@ function BlogPanel({ token, t, toast }: PanelProps) {
     setSaving(true);
     try {
       const isNew = !editing.id;
-      const raw = pickKeys(editing, [...POST_CREATE_KEYS]);
-      if (raw.tags && typeof raw.tags === "string") {
-        raw.tags = (raw.tags as unknown as string).split(",").map((s: string) => s.trim()).filter(Boolean) as unknown as string[];
-      }
+      const raw = pickPostPayload(editing as Record<string, unknown>);
       const res = isNew
         ? await api.admin.posts.create(token, raw)
         : await api.admin.posts.update(token, editing.slug!, raw);
@@ -614,64 +584,81 @@ function BlogPanel({ token, t, toast }: PanelProps) {
   return (
     <div>
       <div className="mb-4 flex justify-end gap-2">
-        <button onClick={() => setEditing({ title: "", slug: "", summary: "", content: "", tags: [], published: false })}
+        <button onClick={() => setEditing(createEmptyPost())}
           className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-foreground">{t("admin.create")}</button>
       </div>
 
       {editing && (
-        <div className="mb-6 space-y-4">
-          <div className="flex gap-2">
-            <button onClick={() => docRef.current?.click()}
-              className="rounded-lg border border-accent/40 bg-accent/10 px-3 py-2 text-xs font-medium text-accent hover:bg-accent/20">
-              {t("admin.uploadDoc")}
-            </button>
-            <input ref={docRef} type="file" accept=".md,.markdown,.txt,.pdf,.html" className="hidden"
-              onChange={async (e) => { const f = e.target.files?.[0]; if (f) await importDoc(f); e.target.value = ""; }} />
-            <input
-              value={importUrl}
-              onChange={(e) => setImportUrl(e.target.value)}
-              placeholder={t("admin.importPlaceholder")}
-              className="min-w-[260px] flex-1 rounded-lg border border-border bg-background px-3 py-2 text-xs focus:border-accent focus:outline-none"
-            />
-            <button
-              onClick={importRemoteDoc}
-              className="rounded-lg border border-border px-3 py-2 text-xs font-medium text-muted-foreground hover:bg-muted"
-            >
-              {t("admin.importUrl")}
-            </button>
-            <button onClick={() => setPreview(!preview)}
-              className={`rounded-lg border px-3 py-2 text-xs font-medium ${preview ? "border-accent bg-accent/20 text-accent" : "text-muted-foreground hover:bg-muted"}`}>
-              {t("admin.contentPreview")}
-            </button>
-            {editing.content && isBlockNoteJson(editing.content) && (
-              <button onClick={() => {
-                const md = (editing as Record<string, unknown>)._content_md as string | undefined;
-                if (!md) return;
-                const blob = new Blob([md], { type: "text/markdown" });
-                const a = document.createElement("a");
-                a.href = URL.createObjectURL(blob);
-                a.download = `${editing.slug || "post"}.md`;
-                a.click();
-                URL.revokeObjectURL(a.href);
-              }}
-                className="rounded-lg border px-3 py-2 text-xs font-medium text-muted-foreground hover:bg-muted">
-                Export .md
+        <DetailEditSheet
+          open
+          title={editing.id ? t("admin.edit") : t("admin.create")}
+          token={token}
+          fields={postFields(t)}
+          data={{
+            ...editing,
+            tags: Array.isArray(editing.tags) ? editing.tags.join(", ") : (editing.tags || ""),
+          }}
+          onChange={(next) => setEditing({
+            ...next,
+            tags: typeof next.tags === "string" ? next.tags.split(",").map((s: string) => s.trim()).filter(Boolean) : next.tags,
+          } as Partial<Post>)}
+          onSave={save}
+          onCancel={() => { setEditing(null); setPreview(false); }}
+          saving={saving}
+          modeLabel={t("admin.mode")}
+          closeLabel={t("admin.cancel")}
+          saveLabel={t("admin.save")}
+          savingLabel={t("admin.saving")}
+          cancelLabel={t("admin.cancel")}
+          beforeFields={
+            <div className="mb-6 flex flex-wrap gap-2">
+              <button onClick={() => docRef.current?.click()}
+                className="rounded-lg border border-accent/40 bg-accent/10 px-3 py-2 text-xs font-medium text-accent hover:bg-accent/20">
+                {t("admin.uploadDoc")}
               </button>
-            )}
-          </div>
-
-          <EditForm fields={blogFields(t)} data={{...editing, tags: Array.isArray(editing.tags) ? editing.tags.join(", ") : (editing.tags || "")}}
-            onChange={(d) => setEditing({...d, tags: typeof d.tags === "string" ? d.tags.split(",").map((s: string) => s.trim()).filter(Boolean) : d.tags} as Partial<Post>)}
-            onSave={save} onCancel={() => { setEditing(null); setPreview(false); }} t={t} saving={saving} token={token} />
-
-          {preview && editing.content && (
+              <input ref={docRef} type="file" accept=".md,.markdown,.txt,.pdf,.html" className="hidden"
+                onChange={async (e) => { const f = e.target.files?.[0]; if (f) await importDoc(f); e.target.value = ""; }} />
+              <input
+                value={importUrl}
+                onChange={(e) => setImportUrl(e.target.value)}
+                placeholder={t("admin.importPlaceholder")}
+                className="min-w-[260px] flex-1 rounded-lg border border-border bg-background px-3 py-2 text-xs focus:border-accent focus:outline-none"
+              />
+              <button
+                onClick={importRemoteDoc}
+                className="rounded-lg border border-border px-3 py-2 text-xs font-medium text-muted-foreground hover:bg-muted"
+              >
+                {t("admin.importUrl")}
+              </button>
+              <button onClick={() => setPreview(!preview)}
+                className={`rounded-lg border px-3 py-2 text-xs font-medium ${preview ? "border-accent bg-accent/20 text-accent" : "text-muted-foreground hover:bg-muted"}`}>
+                {t("admin.contentPreview")}
+              </button>
+              {editing.content && isRichTextJson(editing.content) && (
+                <button onClick={() => {
+                  const md = (editing as Record<string, unknown>)._content_md as string | undefined;
+                  if (!md) return;
+                  const blob = new Blob([md], { type: "text/markdown" });
+                  const a = document.createElement("a");
+                  a.href = URL.createObjectURL(blob);
+                  a.download = `${editing.slug || "post"}.md`;
+                  a.click();
+                  URL.revokeObjectURL(a.href);
+                }}
+                  className="rounded-lg border px-3 py-2 text-xs font-medium text-muted-foreground hover:bg-muted">
+                  Export .md
+                </button>
+              )}
+            </div>
+          }
+          afterFields={preview && editing.content ? (
             <div className="rounded-2xl border border-border/50 bg-card p-6">
-              {isBlockNoteJson(editing.content)
+              {isRichTextJson(editing.content)
                 ? <RichViewerLazy content={editing.content} />
                 : <MarkdownRenderer content={editing.content} />}
             </div>
-          )}
-        </div>
+          ) : null}
+        />
       )}
 
       <div className="space-y-2">
@@ -968,150 +955,6 @@ function ChatSessionsPanel({ token, t }: PanelProps) {
         </div>
       ))}
       {sessions.length === 0 && <p className="py-8 text-center text-muted-foreground">{t("admin.chatNoSessions")}</p>}
-    </div>
-  );
-}
-
-/* ─── Shared Edit Form ─── */
-interface FieldDef {
-  key: string;
-  label: string;
-  type: "text" | "textarea" | "select" | "checkbox" | "url_with_upload" | "single_option" | "multi_option" | "rich_editor";
-  options?: string[];
-}
-
-function EditForm({ fields, data, onChange, onSave, onCancel, t, saving, token }: {
-  fields: FieldDef[];
-  data: Record<string, unknown>;
-  onChange: (d: Record<string, unknown>) => void;
-  onSave: () => void;
-  onCancel: () => void;
-  t: (k: TKey) => string;
-  saving: boolean;
-  token?: string;
-}) {
-  const set = (key: string, val: unknown) => onChange({ ...data, [key]: val });
-  const fileRef = useRef<HTMLInputElement>(null);
-  const [uploadingField, setUploadingField] = useState<string | null>(null);
-
-  const handleFileUpload = async (key: string, file: File) => {
-    if (!token) return;
-    setUploadingField(key);
-    const compressed = await compressImage(file);
-    const res = await api.admin.upload(token, compressed);
-    if (res.data) {
-      const url = res.data.url.startsWith("http") ? res.data.url : `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}${res.data.url}`;
-      set(key, url);
-    }
-    setUploadingField(null);
-  };
-
-  return (
-    <div className="mb-6 rounded-2xl border border-accent/30 bg-card p-6">
-      <div className="grid gap-4 sm:grid-cols-2">
-        {fields.map(f => {
-          const rawValue = data[f.key];
-          const stringValue = String(rawValue ?? "");
-          const previewUrl = typeof rawValue === "string" ? rawValue.trim() : "";
-
-          return (
-          <div key={f.key} className={f.type === "textarea" || f.type === "url_with_upload" || f.type === "rich_editor" ? "sm:col-span-2" : ""}>
-            <label className="mb-1 block text-xs font-medium text-muted-foreground">{f.label}</label>
-
-            {f.type === "text" && (
-              <input type="text"
-                value={stringValue}
-                onChange={e => set(f.key, e.target.value)}
-                className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:border-accent focus:outline-none" />
-            )}
-
-            {f.type === "single_option" && (
-              <SingleOptionInput
-                value={stringValue}
-                options={f.options ?? []}
-                onChange={(next) => set(f.key, next)}
-                placeholder={f.label}
-              />
-            )}
-
-            {f.type === "multi_option" && (
-              <MultiOptionInput
-                values={ensureStringArray(rawValue)}
-                options={f.options ?? []}
-                onChange={(next) => set(f.key, next)}
-                placeholder={f.label}
-              />
-            )}
-
-            {f.type === "url_with_upload" && (
-              <div className="space-y-2">
-                <div className="flex gap-2">
-                  <input type="text" value={stringValue} onChange={e => set(f.key, e.target.value)}
-                    placeholder="https://... or upload"
-                    className="flex-1 rounded-lg border border-border bg-background px-3 py-2 text-sm focus:border-accent focus:outline-none" />
-                  <button type="button"
-                    disabled={uploadingField === f.key}
-                    onClick={() => { fileRef.current?.setAttribute("data-field", f.key); fileRef.current?.click(); }}
-                    className="shrink-0 rounded-lg border border-accent/40 bg-accent/10 px-3 py-2 text-xs font-medium text-accent hover:bg-accent/20 disabled:opacity-50">
-                    {uploadingField === f.key ? t("admin.uploading") : t("admin.upload")}
-                  </button>
-                </div>
-                {previewUrl.length > 0 && (
-                  <div className="flex items-center gap-3 rounded-lg bg-muted/30 p-2">
-                    <img src={previewUrl} alt="preview" className="h-16 w-24 rounded-md object-cover"
-                      onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
-                    <span className="truncate text-xs text-muted-foreground">{previewUrl}</span>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {f.type === "textarea" && (
-              <textarea value={stringValue} onChange={e => set(f.key, e.target.value)} rows={3}
-                className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:border-accent focus:outline-none" />
-            )}
-
-            {f.type === "rich_editor" && (
-              <RichEditor
-                key={`${data.id ?? "new"}-${f.key}`}
-                initialContent={stringValue}
-                token={token}
-                onChange={(json, md) => {
-                  onChange({ ...data, [f.key]: json, [`_${f.key}_md`]: md });
-                }}
-              />
-            )}
-
-            {f.type === "select" && (
-              <select value={stringValue} onChange={e => set(f.key, e.target.value)}
-                className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:border-accent focus:outline-none">
-                {f.options?.map(o => <option key={o} value={o}>{o}</option>)}
-              </select>
-            )}
-
-            {f.type === "checkbox" && (
-              <input type="checkbox" checked={Boolean(rawValue)} onChange={e => set(f.key, e.target.checked)}
-                className="h-4 w-4 rounded border-border" />
-            )}
-          </div>
-        );})}
-      </div>
-
-      <input ref={fileRef} type="file" accept="image/*" className="hidden"
-        onChange={async (e) => {
-          const file = e.target.files?.[0];
-          const field = fileRef.current?.getAttribute("data-field");
-          if (file && field) await handleFileUpload(field, file);
-          e.target.value = "";
-        }} />
-
-      <div className="mt-4 flex gap-3">
-        <button onClick={onSave} disabled={saving}
-          className="rounded-lg bg-accent px-5 py-2 text-sm font-medium text-accent-foreground disabled:opacity-50">
-          {saving ? t("admin.saving") : t("admin.save")}
-        </button>
-        <button onClick={onCancel} className="rounded-lg border px-5 py-2 text-sm text-muted-foreground hover:bg-muted">{t("admin.cancel")}</button>
-      </div>
     </div>
   );
 }

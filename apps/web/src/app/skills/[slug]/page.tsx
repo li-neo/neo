@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { ArrowLeft, ArrowUpRight, Pencil, Save, Sparkles, Terminal, X } from "lucide-react";
@@ -12,6 +12,7 @@ import { MarkdownRenderer } from "@/components/blocks/markdown-renderer";
 import { useAdminSession } from "@/hooks/use-admin-session";
 import { api, type Skill } from "@/lib/api";
 import { richTextToPlain } from "@/lib/utils";
+import { isRichTextJson } from "@/lib/rich-text";
 import { dateLocale, useI18n } from "@/lib/i18n";
 
 const RichEditor = dynamic(
@@ -25,13 +26,6 @@ const RichViewerLazy = dynamic(
 
 const PLATFORM_OPTIONS = ["openclaw", "mcp", "other"] as const;
 const STATUS_OPTIONS = ["published", "draft", "archived"] as const;
-
-function isBlockNoteJson(s: string | null | undefined): boolean {
-  if (!s) return false;
-  const t = s.trim();
-  if (!t.startsWith("[")) return false;
-  try { return Array.isArray(JSON.parse(t)); } catch { return false; }
-}
 
 type DetailState = "loading" | "ready" | "not_found";
 type Draft = {
@@ -254,7 +248,7 @@ export default function SkillDetailPage() {
                       onChange={json => d("description", json)}
                     />
                   ) : desc ? (
-                    isBlockNoteJson(desc)
+                    isRichTextJson(desc)
                       ? <RichViewerLazy content={desc} />
                       : <MarkdownRenderer content={desc} />
                   ) : (

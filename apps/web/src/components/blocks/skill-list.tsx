@@ -5,151 +5,11 @@ import { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import { useRouter } from "next/navigation";
 import { api, type Skill } from "@/lib/api";
-import { useI18n, type TKey } from "@/lib/i18n";
+import { useI18n } from "@/lib/i18n";
 import { richTextToPlain } from "@/lib/utils";
-import { SingleOptionInput } from "@/components/ui/flexible-fields";
 import { mergeFlexibleOptions } from "@/lib/flexible-options";
-import dynamic from "next/dynamic";
-
-const RichEditor = dynamic(
-  () => import("@/components/blocks/rich-editor").then(m => m.RichEditor),
-  { ssr: false, loading: () => <div className="h-48 animate-pulse rounded-2xl bg-muted/30" /> },
-);
-
-const TOKEN_KEY = "neo-admin-token";
-const SKILL_CREATE_KEYS = ["slug", "name", "description", "category", "version", "platform", "install_command", "source_url", "status"] as const;
-const DEFAULT_SKILL_CATEGORIES = ["development", "documentation", "devops", "ml", "data"] as const;
-
-interface FieldDef {
-  key: string;
-  label: string;
-  type: "text" | "textarea" | "select" | "single_option" | "rich_editor";
-  options?: string[];
-}
-
-function skillFields(t: (k: TKey) => string, categoryOptions: string[]): FieldDef[] {
-  return [
-    { key: "name", label: t("admin.fName"), type: "text" },
-    { key: "slug", label: t("admin.fSlug"), type: "text" },
-    { key: "category", label: t("admin.fCategory"), type: "single_option", options: categoryOptions },
-    { key: "description", label: t("admin.fDescription"), type: "rich_editor" },
-    { key: "version", label: t("admin.fVersion"), type: "text" },
-    { key: "platform", label: t("admin.fPlatform"), type: "select", options: ["openclaw", "mcp", "other"] },
-    { key: "install_command", label: t("admin.fInstallCmd"), type: "text" },
-    { key: "source_url", label: t("admin.fSourceUrl"), type: "text" },
-    { key: "status", label: t("admin.fStatus"), type: "select", options: ["published", "draft", "archived"] },
-  ];
-}
-
-function pickKeys<T extends Record<string, unknown>>(data: T, keys: readonly string[]): Partial<T> {
-  const out: Record<string, unknown> = {};
-  for (const key of keys) {
-    if (!(key in data)) continue;
-    const value = data[key] === "" ? null : data[key];
-    out[key] = value;
-  }
-  return out as Partial<T>;
-}
-
-function SkillEditSheet({
-  token,
-  data,
-  onChange,
-  onSave,
-  onCancel,
-  saving,
-  categoryOptions,
-}: {
-  token: string;
-  data: Record<string, unknown>;
-  onChange: (next: Record<string, unknown>) => void;
-  onSave: () => void;
-  onCancel: () => void;
-  saving: boolean;
-  categoryOptions: string[];
-}) {
-  const { t } = useI18n();
-  const set = (key: string, value: unknown) => onChange({ ...data, [key]: value });
-
-  return (
-    <div className="fixed inset-0 z-50 flex justify-end bg-stone-950/40 backdrop-blur-sm">
-      <div className="h-full w-full max-w-2xl overflow-y-auto border-l border-white/10 bg-background px-6 py-6 shadow-2xl">
-        <div className="mb-6 flex items-center justify-between">
-          <div>
-            <p className="text-xs font-medium uppercase tracking-[0.16em] text-orange-500">{t("admin.mode")}</p>
-            <h3 className="mt-2 text-2xl font-semibold">{data.id ? t("admin.edit") : t("admin.create")}</h3>
-          </div>
-          <button onClick={onCancel} className="rounded-full border border-border px-3 py-1 text-sm text-muted-foreground transition-colors hover:bg-muted">
-            {t("admin.cancel")}
-          </button>
-        </div>
-
-        <div className="grid gap-4 sm:grid-cols-2">
-          {skillFields(t, categoryOptions).map((field) => {
-            const stringValue = String(data[field.key] ?? "");
-            return (
-              <div key={field.key} className={field.type === "textarea" || field.type === "rich_editor" ? "sm:col-span-2" : ""}>
-                <label className="mb-1 block text-xs font-medium text-muted-foreground">{field.label}</label>
-                {field.type === "text" && (
-                  <input
-                    type="text"
-                    value={stringValue}
-                    onChange={(e) => set(field.key, e.target.value)}
-                    className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:border-accent focus:outline-none"
-                  />
-                )}
-                {field.type === "single_option" && (
-                  <SingleOptionInput
-                    value={stringValue}
-                    options={field.options ?? []}
-                    onChange={(next) => set(field.key, next)}
-                    placeholder={field.label}
-                  />
-                )}
-                {field.type === "textarea" && (
-                  <textarea
-                    value={stringValue}
-                    onChange={(e) => set(field.key, e.target.value)}
-                    rows={4}
-                    className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:border-accent focus:outline-none"
-                  />
-                )}
-                {field.type === "rich_editor" && (
-                  <RichEditor
-                    key={`${data.id ?? "new"}-${field.key}`}
-                    initialContent={stringValue}
-                    token={token}
-                    onChange={(json) => set(field.key, json)}
-                  />
-                )}
-                {field.type === "select" && (
-                  <select
-                    value={stringValue}
-                    onChange={(e) => set(field.key, e.target.value)}
-                    className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:border-accent focus:outline-none"
-                  >
-                    {field.options?.map((option) => (
-                      <option key={option} value={option}>{option}</option>
-                    ))}
-                  </select>
-                )}
-              </div>
-            );
-          })}
-        </div>
-
-        <div className="mt-6 flex gap-3">
-          <button onClick={onSave} disabled={saving} className="rounded-lg bg-accent px-5 py-2 text-sm font-medium text-accent-foreground disabled:opacity-50">
-            {saving ? t("admin.saving") : t("admin.save")}
-          </button>
-          <button onClick={onCancel} className="rounded-lg border px-5 py-2 text-sm text-muted-foreground transition-colors hover:bg-muted">
-            {t("admin.cancel")}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
+import { DetailEditSheet } from "@/components/blocks/detail-edit-sheet";
+import { TOKEN_KEY, DEFAULT_SKILL_CATEGORIES, createEmptySkill, pickSkillPayload, skillFields } from "@/lib/entity-editor-config";
 
 export function SkillList({ skills }: { skills: Skill[] }) {
   const { t } = useI18n();
@@ -194,17 +54,7 @@ export function SkillList({ skills }: { skills: Skill[] }) {
   }, [toast]);
 
   const openCreate = () => {
-    setEditing({
-      name: "",
-      slug: "",
-      category: "development",
-      description: "",
-      version: "0.1.0",
-      platform: "openclaw",
-      install_command: "",
-      source_url: "",
-      status: "published",
-    });
+    setEditing(createEmptySkill());
   };
 
   const saveSkill = async () => {
@@ -212,7 +62,7 @@ export function SkillList({ skills }: { skills: Skill[] }) {
     setSaving(true);
     try {
       const isNew = !editing.id;
-      const payload = pickKeys(editing, [...SKILL_CREATE_KEYS]);
+      const payload = pickSkillPayload(editing);
       const res = isNew
         ? await api.admin.skills.create(token, payload)
         : await api.admin.skills.update(token, String(editing.slug), payload);
@@ -248,14 +98,21 @@ export function SkillList({ skills }: { skills: Skill[] }) {
       )}
 
       {isAdmin && editing && token && (
-        <SkillEditSheet
+        <DetailEditSheet
+          open
+          title={editing.id ? t("admin.edit") : t("admin.create")}
           token={token}
+          fields={skillFields(t, categoryOptions)}
           data={editing}
           onChange={setEditing}
           onSave={saveSkill}
           onCancel={() => setEditing(null)}
           saving={saving}
-          categoryOptions={categoryOptions}
+          modeLabel={t("admin.mode")}
+          closeLabel={t("admin.cancel")}
+          saveLabel={t("admin.save")}
+          savingLabel={t("admin.saving")}
+          cancelLabel={t("admin.cancel")}
         />
       )}
 

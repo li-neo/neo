@@ -4,6 +4,7 @@ import Link from "next/link";
 import { motion } from "framer-motion";
 import type { Skill } from "@/lib/api";
 import { useI18n } from "@/lib/i18n";
+import { richTextToPlain } from "@/lib/rich-text";
 
 export function SkillsPreview({ skills }: { skills: Skill[] }) {
   const { t } = useI18n();
@@ -49,7 +50,7 @@ export function SkillsPreview({ skills }: { skills: Skill[] }) {
                 {skill.name}
               </h3>
               <p className="mb-4 line-clamp-2 text-sm text-muted-foreground">
-                {skill.description}
+                {richTextToPlain(skill.description)}
               </p>
               <div className="flex items-center justify-between text-xs text-muted-foreground">
                 <span className="flex items-center gap-1">

@@ -4,307 +4,18 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { useRouter } from "next/navigation";
 import { api, type Post } from "@/lib/api";
-import { useI18n, dateLocale, type TKey } from "@/lib/i18n";
+import { useI18n, dateLocale } from "@/lib/i18n";
 import { MarkdownRenderer } from "@/components/blocks/markdown-renderer";
 import { embedPostSourceMeta, parsePostSourceMeta, sourceLabel } from "@/lib/post-content";
-import { compressImage } from "@/lib/image-upload";
 import dynamic from "next/dynamic";
-
-const RichEditor = dynamic(
-  () => import("@/components/blocks/rich-editor").then(m => m.RichEditor),
-  { ssr: false, loading: () => <div className="h-48 animate-pulse rounded-2xl bg-muted/30" /> },
-);
+import { DetailEditSheet } from "@/components/blocks/detail-edit-sheet";
+import { isRichTextJson, richTextToPlain } from "@/lib/rich-text";
+import { TOKEN_KEY, createEmptyPost, pickPostPayload, postFields } from "@/lib/entity-editor-config";
 
 const RichViewerLazy = dynamic(
-  () => import("@/components/blocks/rich-editor").then(m => m.RichViewer),
+  () => import("@/components/blocks/rich-editor").then((m) => m.RichViewer),
   { ssr: false, loading: () => <div className="h-32 animate-pulse rounded-2xl bg-muted/30" /> },
 );
-
-function isBlockNoteJson(content: string | null | undefined): boolean {
-  if (!content) return false;
-  const trimmed = content.trim();
-  if (!trimmed.startsWith("[")) return false;
-  try { const p = JSON.parse(trimmed); return Array.isArray(p); } catch { return false; }
-}
-
-const TOKEN_KEY = "neo-admin-token";
-const POST_CREATE_KEYS = ["slug", "title", "summary", "content", "cover_url", "tags", "reading_time", "published"] as const;
-
-interface FieldDef {
-  key: string;
-  label: string;
-  type: "text" | "number" | "textarea" | "checkbox" | "url_with_upload" | "rich_editor";
-}
-
-function postFields(t: (k: TKey) => string): FieldDef[] {
-  return [
-    { key: "title", label: t("admin.fTitle"), type: "text" },
-    { key: "slug", label: t("admin.fSlug"), type: "text" },
-    { key: "summary", label: t("admin.fSummary"), type: "textarea" },
-    { key: "content", label: t("admin.fContent"), type: "rich_editor" },
-    { key: "cover_url", label: t("admin.fCoverUrl"), type: "url_with_upload" },
-    { key: "tags", label: t("admin.fTags"), type: "text" },
-    { key: "reading_time", label: t("admin.fReadingTime"), type: "number" },
-    { key: "published", label: t("admin.fPublished"), type: "checkbox" },
-  ];
-}
-
-function pickKeys<T extends Record<string, unknown>>(data: T, keys: readonly string[]): Partial<T> {
-  const out: Record<string, unknown> = {};
-  for (const key of keys) {
-    if (!(key in data)) continue;
-    let value = data[key];
-    if (key === "tags" && Array.isArray(value)) {
-      value = (value as string[]).filter((item) => item.length > 0);
-      if ((value as string[]).length === 0) value = null;
-    }
-    if (value === "") value = null;
-    out[key] = value;
-  }
-  return out as Partial<T>;
-}
-
-function PostEditSheet({
-  token,
-  data,
-  onChange,
-  onSave,
-  onCancel,
-  saving,
-}: {
-  token: string;
-  data: Record<string, unknown>;
-  onChange: (next: Record<string, unknown>) => void;
-  onSave: () => void;
-  onCancel: () => void;
-  saving: boolean;
-}) {
-  const { t } = useI18n();
-  const fileRef = useRef<HTMLInputElement>(null);
-  const [uploadingField, setUploadingField] = useState<string | null>(null);
-  const [importUrl, setImportUrl] = useState("");
-  const set = (key: string, value: unknown) => onChange({ ...data, [key]: value });
-
-  const applyImportedDraft = (draft: {
-    title: string;
-    slug: string;
-    summary: string;
-    content: string;
-    tags: string[];
-    cover_url: string | null;
-    published: boolean;
-    reading_time: number;
-    source_type?: string;
-    source_url?: string | null;
-  }) => {
-    const contentWithMeta = embedPostSourceMeta(draft.content, {
-      sourceType: draft.source_type ?? null,
-      sourceUrl: draft.source_url ?? null,
-    });
-    onChange({
-      ...data,
-      title: data.title || draft.title,
-      slug: data.slug || draft.slug,
-      summary: data.summary || draft.summary,
-      content: contentWithMeta,
-      tags: draft.tags,
-      cover_url: data.cover_url || draft.cover_url,
-      published: typeof data.published === "boolean" ? data.published : draft.published,
-      reading_time: draft.reading_time,
-    });
-  };
-
-  const handleFileUpload = async (key: string, file: File) => {
-    setUploadingField(key);
-    const compressed = await compressImage(file);
-    const res = await api.admin.upload(token, compressed);
-    if (res.data) {
-      const url = res.data.url.startsWith("http")
-        ? res.data.url
-        : `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}${res.data.url}`;
-      set(key, url);
-    }
-    setUploadingField(null);
-  };
-
-  const importDoc = async (file: File) => {
-    setUploadingField("post-import");
-    const res = await api.admin.posts.importFile(token, file);
-    if (res.data) applyImportedDraft(res.data);
-    setUploadingField(null);
-  };
-
-  const importRemoteDoc = async () => {
-    const url = importUrl.trim();
-    if (!url) return;
-    setUploadingField("post-import");
-    const res = await api.admin.posts.importUrl(token, url);
-    if (res.data) {
-      applyImportedDraft(res.data);
-      setImportUrl("");
-    }
-    setUploadingField(null);
-  };
-
-  return (
-    <div className="fixed inset-0 z-50 flex justify-end bg-stone-950/40 backdrop-blur-sm">
-      <div className="h-full w-full max-w-3xl overflow-y-auto border-l border-white/10 bg-background px-6 py-6 shadow-2xl">
-        <div className="mb-6 flex items-center justify-between">
-          <div>
-            <p className="text-xs font-medium uppercase tracking-[0.16em] text-orange-500">{t("admin.mode")}</p>
-            <h3 className="mt-2 text-2xl font-semibold">{data.id ? t("admin.edit") : t("admin.create")}</h3>
-          </div>
-          <button onClick={onCancel} className="rounded-full border border-border px-3 py-1 text-sm text-muted-foreground transition-colors hover:bg-muted">
-            {t("admin.cancel")}
-          </button>
-        </div>
-
-        <div className="mb-6 flex flex-wrap gap-2">
-          <button
-            type="button"
-            onClick={() => {
-              fileRef.current?.setAttribute("data-field", "__import__");
-              fileRef.current?.setAttribute("accept", ".md,.markdown,.txt,.pdf,.html");
-              fileRef.current?.click();
-            }}
-            className="rounded-lg border border-accent/40 bg-accent/10 px-3 py-2 text-xs font-medium text-accent hover:bg-accent/20 disabled:opacity-50"
-            disabled={uploadingField === "post-import"}
-          >
-            {uploadingField === "post-import" ? t("admin.uploading") : t("admin.uploadDoc")}
-          </button>
-          <input
-            value={importUrl}
-            onChange={(e) => setImportUrl(e.target.value)}
-            placeholder={t("admin.importPlaceholder")}
-            className="min-w-[260px] flex-1 rounded-lg border border-border bg-background px-3 py-2 text-xs focus:border-accent focus:outline-none"
-          />
-          <button
-            type="button"
-            onClick={importRemoteDoc}
-            className="rounded-lg border border-border px-3 py-2 text-xs font-medium text-muted-foreground hover:bg-muted"
-          >
-            {t("admin.importUrl")}
-          </button>
-        </div>
-
-        <div className="grid gap-4 sm:grid-cols-2">
-          {postFields(t).map((field) => {
-            const rawValue = data[field.key];
-            const stringValue = field.key === "tags" && Array.isArray(rawValue) ? (rawValue as string[]).join(", ") : String(rawValue ?? "");
-            const previewUrl = typeof rawValue === "string" ? rawValue.trim() : "";
-            return (
-              <div key={field.key} className={field.type === "textarea" || field.type === "url_with_upload" || field.type === "rich_editor" ? "sm:col-span-2" : ""}>
-                <label className="mb-1 block text-xs font-medium text-muted-foreground">{field.label}</label>
-                {field.type === "text" && (
-                  <input
-                    type="text"
-                    value={stringValue}
-                    onChange={(e) => set(field.key, field.key === "tags" ? e.target.value.split(",").map((item) => item.trim()) : e.target.value)}
-                    className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:border-accent focus:outline-none"
-                  />
-                )}
-                {field.type === "number" && (
-                  <input
-                    type="number"
-                    min={0}
-                    value={stringValue}
-                    onChange={(e) => set(field.key, parseInt(e.target.value, 10) || 0)}
-                    className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:border-accent focus:outline-none"
-                  />
-                )}
-                {field.type === "textarea" && (
-                  <textarea
-                    value={stringValue}
-                    onChange={(e) => set(field.key, e.target.value)}
-                    rows={4}
-                    className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:border-accent focus:outline-none"
-                  />
-                )}
-                {field.type === "rich_editor" && (
-                  <RichEditor
-                    key={`${data.id ?? "new"}-${field.key}`}
-                    initialContent={stringValue}
-                    token={token}
-                    onChange={(json) => set(field.key, json)}
-                  />
-                )}
-                {field.type === "checkbox" && (
-                  <input
-                    type="checkbox"
-                    checked={Boolean(rawValue)}
-                    onChange={(e) => set(field.key, e.target.checked)}
-                    className="h-4 w-4 rounded border-border"
-                  />
-                )}
-                {field.type === "url_with_upload" && (
-                  <div className="space-y-2">
-                    <div className="flex gap-2">
-                      <input
-                        type="text"
-                        value={stringValue}
-                        onChange={(e) => set(field.key, e.target.value)}
-                        placeholder="https://... or upload"
-                        className="flex-1 rounded-lg border border-border bg-background px-3 py-2 text-sm focus:border-accent focus:outline-none"
-                      />
-                      <button
-                        type="button"
-                        disabled={uploadingField === field.key}
-                        onClick={() => {
-                          fileRef.current?.setAttribute("data-field", field.key);
-                          fileRef.current?.setAttribute("accept", "image/*");
-                          fileRef.current?.click();
-                        }}
-                        className="rounded-lg border border-accent/40 bg-accent/10 px-3 py-2 text-xs font-medium text-accent hover:bg-accent/20 disabled:opacity-50"
-                      >
-                        {uploadingField === field.key ? t("admin.uploading") : t("admin.upload")}
-                      </button>
-                    </div>
-                    {previewUrl.length > 0 && (
-                      <div className="flex items-center gap-3 rounded-lg bg-muted/30 p-2">
-                        <img src={previewUrl} alt="preview" className="h-16 w-24 rounded-md object-cover" />
-                        <span className="truncate text-xs text-muted-foreground">{previewUrl}</span>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-
-        <input
-          ref={fileRef}
-          type="file"
-          className="hidden"
-          onChange={async (e) => {
-            const file = e.target.files?.[0];
-            const field = fileRef.current?.getAttribute("data-field");
-            if (file && field === "__import__") await importDoc(file);
-            else if (file && field) await handleFileUpload(field, file);
-            e.target.value = "";
-          }}
-        />
-
-        <div className="mt-6 flex gap-3">
-          <button onClick={onSave} disabled={saving} className="rounded-lg bg-accent px-5 py-2 text-sm font-medium text-accent-foreground disabled:opacity-50">
-            {saving ? t("admin.saving") : t("admin.save")}
-          </button>
-          <button onClick={onCancel} className="rounded-lg border px-5 py-2 text-sm text-muted-foreground transition-colors hover:bg-muted">
-            {t("admin.cancel")}
-          </button>
-        </div>
-
-        {typeof data.content === "string" && data.content.trim().length > 0 && (
-          <div className="mt-6 rounded-2xl border border-border/50 bg-card p-6">
-            {isBlockNoteJson(data.content as string)
-              ? <RichViewerLazy content={data.content as string} />
-              : <MarkdownRenderer content={data.content as string} />}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
 
 export function PostList({ posts }: { posts: Post[] }) {
   const { t, locale } = useI18n();
@@ -315,6 +26,9 @@ export function PostList({ posts }: { posts: Post[] }) {
   const [editing, setEditing] = useState<Record<string, unknown> | null>(null);
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  const [importUrl, setImportUrl] = useState("");
+  const [importing, setImporting] = useState(false);
+  const importFileRef = useRef<HTMLInputElement>(null);
   const visiblePosts = useMemo(() => items, [items]);
 
   useEffect(() => {
@@ -345,16 +59,64 @@ export function PostList({ posts }: { posts: Post[] }) {
   }, [toast]);
 
   const openCreate = () => {
-    setEditing({
-      title: "",
-      slug: "",
-      summary: "",
-      content: "",
-      cover_url: "",
-      tags: [],
-      reading_time: 5,
-      published: true,
+    setEditing(createEmptyPost());
+  };
+
+  const applyImportedDraft = (draft: {
+    title: string;
+    slug: string;
+    summary: string;
+    content: string;
+    tags: string[];
+    cover_url: string | null;
+    published: boolean;
+    reading_time: number;
+    source_type?: string;
+    source_url?: string | null;
+  }) => {
+    const contentWithMeta = embedPostSourceMeta(draft.content, {
+      sourceType: draft.source_type ?? null,
+      sourceUrl: draft.source_url ?? null,
     });
+
+    setEditing((prev) => ({
+      ...(prev ?? createEmptyPost()),
+      title: prev?.title || draft.title,
+      slug: prev?.slug || draft.slug,
+      summary: prev?.summary || draft.summary,
+      content: contentWithMeta,
+      tags: draft.tags,
+      cover_url: prev?.cover_url || draft.cover_url,
+      published: typeof prev?.published === "boolean" ? prev.published : draft.published,
+      reading_time: draft.reading_time,
+    }));
+  };
+
+  const importDoc = async (file: File) => {
+    if (!token) return;
+    setImporting(true);
+    try {
+      const res = await api.admin.posts.importFile(token, file);
+      if (res.data) applyImportedDraft(res.data);
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  const importRemoteDoc = async () => {
+    if (!token) return;
+    const url = importUrl.trim();
+    if (!url) return;
+    setImporting(true);
+    try {
+      const res = await api.admin.posts.importUrl(token, url);
+      if (res.data) {
+        applyImportedDraft(res.data);
+        setImportUrl("");
+      }
+    } finally {
+      setImporting(false);
+    }
   };
 
   const savePost = async () => {
@@ -362,7 +124,7 @@ export function PostList({ posts }: { posts: Post[] }) {
     setSaving(true);
     try {
       const isNew = !editing.id;
-      const payload = pickKeys(editing, [...POST_CREATE_KEYS]);
+      const payload = pickPostPayload(editing);
       const res = isNew
         ? await api.admin.posts.create(token, payload)
         : await api.admin.posts.update(token, String(editing.slug), payload);
@@ -398,13 +160,67 @@ export function PostList({ posts }: { posts: Post[] }) {
       )}
 
       {isAdmin && editing && token && (
-        <PostEditSheet
+        <DetailEditSheet
+          open
+          title={editing.id ? t("admin.edit") : t("admin.create")}
           token={token}
+          fields={postFields(t)}
           data={editing}
           onChange={setEditing}
           onSave={savePost}
           onCancel={() => setEditing(null)}
           saving={saving}
+          modeLabel={t("admin.mode")}
+          closeLabel={t("admin.cancel")}
+          saveLabel={t("admin.save")}
+          savingLabel={t("admin.saving")}
+          cancelLabel={t("admin.cancel")}
+          beforeFields={
+            <div className="mb-6 flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => importFileRef.current?.click()}
+                className="rounded-lg border border-accent/40 bg-accent/10 px-3 py-2 text-xs font-medium text-accent hover:bg-accent/20 disabled:opacity-50"
+                disabled={importing}
+              >
+                {importing ? t("admin.uploading") : t("admin.uploadDoc")}
+              </button>
+              <input
+                ref={importFileRef}
+                type="file"
+                accept=".md,.markdown,.txt,.pdf,.html"
+                className="hidden"
+                onChange={async (e) => {
+                  const file = e.target.files?.[0];
+                  if (file) await importDoc(file);
+                  e.target.value = "";
+                }}
+              />
+              <input
+                value={importUrl}
+                onChange={(e) => setImportUrl(e.target.value)}
+                placeholder={t("admin.importPlaceholder")}
+                className="min-w-[260px] flex-1 rounded-lg border border-border bg-background px-3 py-2 text-xs focus:border-accent focus:outline-none"
+              />
+              <button
+                type="button"
+                onClick={importRemoteDoc}
+                className="rounded-lg border border-border px-3 py-2 text-xs font-medium text-muted-foreground hover:bg-muted"
+                disabled={importing}
+              >
+                {t("admin.importUrl")}
+              </button>
+            </div>
+          }
+          afterFields={
+            typeof editing.content === "string" && editing.content.trim().length > 0 ? (
+              <div className="mt-6 rounded-2xl border border-border/50 bg-card p-6">
+                {isRichTextJson(editing.content)
+                  ? <RichViewerLazy content={editing.content} />
+                  : <MarkdownRenderer content={editing.content} />}
+              </div>
+            ) : null
+          }
         />
       )}
 
@@ -498,7 +314,7 @@ export function PostList({ posts }: { posts: Post[] }) {
                 {post.title}
               </h2>
               <p className="mb-3 line-clamp-2 text-sm text-muted-foreground">
-                {post.summary}
+                {richTextToPlain(post.summary)}
               </p>
               {post.tags && (
                 <div className="flex flex-wrap gap-1.5">

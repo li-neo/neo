@@ -1,19 +1,17 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useRef, useState, type ReactNode } from "react";
+import dynamic from "next/dynamic";
 import { X } from "lucide-react";
 
 import { MultiOptionInput, SingleOptionInput } from "@/components/ui/flexible-fields";
 import { api } from "@/lib/api";
+import type { EntityFieldDef } from "@/lib/entity-editor-config";
 
-export interface DetailFieldDef {
-  key: string;
-  label: string;
-  type: "text" | "textarea" | "checkbox" | "select" | "single_option" | "multi_option" | "url_with_upload";
-  options?: string[];
-  rows?: number;
-  wide?: boolean;
-}
+const RichEditor = dynamic(
+  () => import("@/components/blocks/rich-editor").then((m) => m.RichEditor),
+  { ssr: false, loading: () => <div className="h-48 animate-pulse rounded-2xl bg-muted/30" /> },
+);
 
 async function compressImage(file: File, maxW = 1600, quality = 0.85): Promise<File> {
   return new Promise((resolve) => {
@@ -67,16 +65,30 @@ export function DetailEditSheet({
   onCancel,
   onSave,
   saving,
+  beforeFields,
+  afterFields,
+  modeLabel = "Admin Edit",
+  closeLabel = "Close",
+  saveLabel = "Save",
+  savingLabel = "Saving...",
+  cancelLabel = "Cancel",
 }: {
   open: boolean;
   title: string;
   token: string;
-  fields: DetailFieldDef[];
+  fields: EntityFieldDef[];
   data: Record<string, unknown>;
   onChange: (next: Record<string, unknown>) => void;
   onCancel: () => void;
   onSave: () => void;
   saving: boolean;
+  beforeFields?: ReactNode;
+  afterFields?: ReactNode;
+  modeLabel?: string;
+  closeLabel?: string;
+  saveLabel?: string;
+  savingLabel?: string;
+  cancelLabel?: string;
 }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [uploadingField, setUploadingField] = useState<string | null>(null);
@@ -103,7 +115,7 @@ export function DetailEditSheet({
       <div className="h-full w-full max-w-3xl overflow-y-auto border-l border-white/10 bg-background px-6 py-6 shadow-2xl">
         <div className="mb-6 flex items-center justify-between">
           <div>
-            <p className="text-xs font-medium uppercase tracking-[0.16em] text-accent">Admin Edit</p>
+            <p className="text-xs font-medium uppercase tracking-[0.16em] text-accent">{modeLabel}</p>
             <h3 className="mt-2 text-2xl font-semibold">{title}</h3>
           </div>
           <button
@@ -111,9 +123,11 @@ export function DetailEditSheet({
             className="inline-flex items-center gap-2 rounded-full border border-border px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-muted"
           >
             <X className="h-4 w-4" />
-            Close
+            {closeLabel}
           </button>
         </div>
+
+        {beforeFields}
 
         <div className="grid gap-4 sm:grid-cols-2">
           {fields.map((field) => {
@@ -121,7 +135,7 @@ export function DetailEditSheet({
             const stringValue = Array.isArray(rawValue) ? rawValue.join(", ") : String(rawValue ?? "");
             const previewUrl = typeof rawValue === "string" ? rawValue.trim() : "";
             return (
-              <div key={field.key} className={field.wide || field.type === "textarea" || field.type === "url_with_upload" ? "sm:col-span-2" : ""}>
+              <div key={field.key} className={field.wide || field.type === "textarea" || field.type === "url_with_upload" || field.type === "rich_editor" ? "sm:col-span-2" : ""}>
                 <label className="mb-1 block text-xs font-medium text-muted-foreground">{field.label}</label>
 
                 {field.type === "text" && (
@@ -129,6 +143,16 @@ export function DetailEditSheet({
                     type="text"
                     value={stringValue}
                     onChange={(e) => set(field.key, e.target.value)}
+                    className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:border-accent focus:outline-none"
+                  />
+                )}
+
+                {field.type === "number" && (
+                  <input
+                    type="number"
+                    min={0}
+                    value={stringValue}
+                    onChange={(e) => set(field.key, parseInt(e.target.value, 10) || 0)}
                     className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:border-accent focus:outline-none"
                   />
                 )}
@@ -183,6 +207,19 @@ export function DetailEditSheet({
                   />
                 )}
 
+                {field.type === "rich_editor" && (
+                  <RichEditor
+                    key={`${data.id ?? "new"}-${field.key}`}
+                    initialContent={stringValue}
+                    token={token}
+                    onChange={(json, markdown) => onChange({
+                      ...data,
+                      [field.key]: json,
+                      [`_${field.key}_md`]: markdown,
+                    })}
+                  />
+                )}
+
                 {field.type === "url_with_upload" && (
                   <div className="space-y-3">
                     <div className="flex gap-2">
@@ -215,6 +252,8 @@ export function DetailEditSheet({
           })}
         </div>
 
+        {afterFields}
+
         <input
           ref={fileRef}
           type="file"
@@ -234,13 +273,13 @@ export function DetailEditSheet({
             disabled={saving}
             className="rounded-lg bg-accent px-5 py-2 text-sm font-medium text-accent-foreground disabled:opacity-50"
           >
-            {saving ? "Saving..." : "Save"}
+            {saving ? savingLabel : saveLabel}
           </button>
           <button
             onClick={onCancel}
             className="rounded-lg border px-5 py-2 text-sm text-muted-foreground transition-colors hover:bg-muted"
           >
-            Cancel
+            {cancelLabel}
           </button>
         </div>
       </div>

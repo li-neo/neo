@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { ArrowLeft, BookText, Calendar, Clock, Eye, Pencil, Save, Upload, X } from "lucide-react";
@@ -12,6 +12,7 @@ import { MarkdownRenderer } from "@/components/blocks/markdown-renderer";
 import { useAdminSession } from "@/hooks/use-admin-session";
 import { api, type Post } from "@/lib/api";
 import { richTextToPlain } from "@/lib/utils";
+import { isRichTextJson } from "@/lib/rich-text";
 import { dateLocale, useI18n } from "@/lib/i18n";
 import { uploadImage } from "@/lib/image-upload";
 
@@ -23,13 +24,6 @@ const RichViewerLazy = dynamic(
   () => import("@/components/blocks/rich-editor").then(m => m.RichViewer),
   { ssr: false, loading: () => <div className="h-32 animate-pulse rounded-2xl bg-muted/30" /> },
 );
-
-function isBlockNoteJson(s: string | null | undefined): boolean {
-  if (!s) return false;
-  const t = s.trim();
-  if (!t.startsWith("[")) return false;
-  try { return Array.isArray(JSON.parse(t)); } catch { return false; }
-}
 
 type DetailState = "loading" | "ready" | "not_found";
 type Draft = {
@@ -275,7 +269,7 @@ export default function BlogDetailPage() {
                     onChange={json => d("content", json)}
                   />
                 ) : content ? (
-                  isBlockNoteJson(content)
+                  isRichTextJson(content)
                     ? <RichViewerLazy content={content} />
                     : <MarkdownRenderer content={content} />
                 ) : (

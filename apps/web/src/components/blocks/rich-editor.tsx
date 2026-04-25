@@ -9,6 +9,8 @@ import { useCreateBlockNote } from "@blocknote/react";
 import { BlockNoteView } from "@blocknote/mantine";
 import "@blocknote/mantine/style.css";
 
+import { parseRichTextBlocks } from "@/lib/rich-text";
+
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 async function uploadFile(file: File, token?: string): Promise<string> {
@@ -26,14 +28,8 @@ async function uploadFile(file: File, token?: string): Promise<string> {
 }
 
 function tryParseBlocks(raw: string | undefined): PartialBlock[] | undefined {
-  if (!raw || raw.trim() === "") return undefined;
-  try {
-    const parsed = JSON.parse(raw);
-    if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-  } catch {
-    // not JSON
-  }
-  return undefined;
+  const parsed = parseRichTextBlocks(raw);
+  return parsed && parsed.length > 0 ? (parsed as PartialBlock[]) : undefined;
 }
 
 /* ─────────── Editor (editable) ─────────── */
